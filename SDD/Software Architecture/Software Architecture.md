@@ -493,7 +493,7 @@ The technical authentication mechanism is not defined by the functional specific
 - Sensitive credentials must never be stored in domain documentation or source code.
 - A user has exactly one system role according to the current specification.
 
-The current role candidates are:
+The implemented system roles are:
 
 - `BUYER`.
 - `SELLER`.
@@ -605,28 +605,28 @@ The following rules apply throughout the implementation:
 
 ## 16. Current Implementation Scope
 
-At the time of this architectural definition, the repository contains:
+At the current delivery checkpoint, the repository contains:
 
-- A Maven project.
+- A Maven and Spring Boot project using Java 17.
 - A Spring Boot application entry point.
-- The package `application.domain.models`.
-- The package `application.domain.valueobjects`.
-- The Domain Model document.
-- The Domain Value Objects document.
-- This Software Architecture document.
+- Implemented domain packages `application.domain.models` and `application.domain.valueobjects`.
+- User participant models: `User`, `Buyer`, `Seller`, `LogisticsOperator`, `Administrator`, and `Supervisor`.
+- Commercial and logistics models: `Product`, `Warehouse`, `Inventory`, `InventoryMovement`, `Cart`, `Order`, `Invoice`, `Shipment`, `Return`, and `Refund`, including their internal item models.
+- Implemented enums and immutable Value Objects for roles, statuses, classifications, movement types, Inventory condition, and Product variants.
+- Automated domain unit tests covering business validation, authorization, Inventory, Cart, Order lifecycle, billing, Shipment, Return, and Refund behavior.
+- 102 Maven-detected tests at the current checkpoint, with zero failures, zero errors, and one generated application-context test skipped until database configuration is introduced.
+- The Domain Model, Domain Value Objects, and Software Architecture documents.
 
 The following items are planned and not yet considered implemented:
 
-- Domain classes.
-- Value Object classes or enums.
 - Input and output ports.
-- Use-case services.
-- REST controllers and DTOs.
+- Application use-case services.
+- REST controllers, request DTOs, response DTOs, and REST mappers.
 - MySQL persistence adapters.
 - MongoDB persistence adapters.
-- Authentication and authorization implementation.
-- Database schemas.
-- Automated test suites.
+- Authentication and authorization infrastructure.
+- Database schemas and persistence mappings.
+- Adapter integration tests and complete application-context tests.
 
 This distinction prevents the architecture document from overstating the current state of the code.
 
@@ -637,7 +637,6 @@ This distinction prevents the architecture document from overstating the current
 The following decisions require validation before implementation:
 
 - Final aggregate boundaries.
-- Relationship between `User`, `Buyer`, and `Seller`.
 - Exact input ports and use-case commands.
 - Repository boundaries based on aggregates.
 - Definitive allocation of information between MySQL and MongoDB.
@@ -649,7 +648,7 @@ The following decisions require validation before implementation:
 - Transaction boundaries.
 - Event publication or asynchronous processing needs.
 - Exact persistence mappings and identifiers.
-- Status values not explicitly defined by the functional specification.
+- Any future status catalogs for Invoice, Shipment, Return, and Refund.
 - Observability, logging, and audit requirements.
 
 Pending decisions must not be silently converted into definitive business rules.

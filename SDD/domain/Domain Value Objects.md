@@ -4,48 +4,45 @@
 
 Value Objects represent controlled business concepts in NexusMarket whose meaning is determined by their values rather than by an independent identity.
 
-They are used to express roles, statuses, classifications, and operation types without relying on arbitrary Strings distributed throughout the application.
+This document is based on the official functional specification. Values explicitly named by the specification are marked as **Explicit**. Values required to complete a coherent implementation are marked as **Inferred**.
 
-This document is based primarily on the official NexusMarket functional specification. Concepts and values not completely defined by the specification remain pending and must not be completed by assumption.
+The banking repository is used only as a documentation and structure guide.
 
 ---
 
-# Value Object Principles
+## Design Principles
 
 - Value Objects do not have an independent business identity.
 - Equality is determined by value.
-- Allowed values are controlled by the domain.
-- Domain classes reference Value Objects instead of arbitrary Strings.
-- Value Objects should be immutable when implemented in Java.
-- A concept is not considered complete when the specification does not define all of its allowed values.
-- The final Java representation as an `enum` or immutable class will be decided before implementation.
+- Controlled catalogs are implemented as Java `enum` types.
+- Structured Value Objects are implemented as immutable Java classes.
+- Value Objects do not depend on Spring, JPA, MongoDB, HTTP, or JSON.
+- Inferred values must be traceable to a requirement or critical validation.
+- Catalogs unsupported by the specification must not be created.
 
 ---
 
-# Classification Summary
+## Classification Summary
 
-## Complete Value Objects
-
-The following concepts have a sufficiently defined set of allowed values:
+### Implemented Enums
 
 - `SystemRole`
+- `UserStatus`
+- `BuyerStatus`
 - `WarehouseOwnerType`
 - `ProductType`
 - `ProductStatus`
 - `InventoryMovementType`
-
-## Partially Defined Value Objects
-
-The following concepts are required by the domain, but their complete allowed values are not defined:
-
-- `UserStatus`
-- `BuyerStatus`
 - `InventoryCondition`
 - `OrderStatus`
 
-## Unsupported Status Catalogs
+### Implemented Immutable Value Objects
 
-The following catalogs must not be created until additional requirements are available:
+- `ProductVariant`
+
+### Unsupported Status Catalogs
+
+The following catalogs are intentionally excluded because the specification does not define their values:
 
 - `InvoiceStatus`
 - `ShipmentStatus`
@@ -58,30 +55,23 @@ The following catalogs must not be created until additional requirements are ava
 
 ## Description
 
-Represents the single role assigned to a User within NexusMarket.
-
-The role determines the User's responsibilities and the information they are authorized to manage.
-
-## Used By
-
-- `User.role`
+Represents the single role assigned to a User. Each concrete User specialization returns exactly one role.
 
 ## Allowed Values
 
-| Code | Name | Business Responsibility | Source |
-|---|---|---|---|
-| `BUYER` | Buyer | Acquires published Products and manages their own purchasing processes. | Explicit |
-| `SELLER` | Seller | Registers and manages their own Products and participates in Inventory and Order management. | Explicit |
-| `LOGISTICS_OPERATOR` | Logistics Operator | Manages physical Warehouse operations and dispatches. | Explicit |
-| `ADMINISTRATOR` | Administrator | Registers Sellers and manages Sellers and Warehouses. | Explicit |
-| `SUPERVISOR` | Supervisor | Consults and monitors operational information. | Explicit |
+| Code | Responsibility | Source |
+| --- | --- | --- |
+| `BUYER` | Acquires published Products and manages their own purchasing process. | Explicit |
+| `SELLER` | Registers and manages Products and participates in Inventory and Order management. | Explicit |
+| `LOGISTICS_OPERATOR` | Manages physical Warehouse operations and dispatches. | Explicit |
+| `ADMINISTRATOR` | Registers Sellers and manages Sellers, Warehouses, and Refunds. | Explicit |
+| `SUPERVISOR` | Consults and monitors operational information. | Explicit |
 
 ## Business Rules
 
-- Every User must have exactly one SystemRole.
-- A User must not manage information outside the responsibilities of their role.
-- A SystemRole is not automatically represented as a separate Java class.
-- `ADMINISTRATOR`, `LOGISTICS_OPERATOR`, and `SUPERVISOR` remain roles unless independent domain data justifies separate Entities.
+- Every User has exactly one role.
+- A participant must not administer information outside that role.
+- `Buyer`, `Seller`, `LogisticsOperator`, `Administrator`, and `Supervisor` specialize `User` and return a constant role.
 
 ---
 
@@ -89,27 +79,21 @@ The role determines the User's responsibilities and the information they are aut
 
 ## Description
 
-Represents the operational condition of a User in NexusMarket.
+Represents the operational condition of a User.
 
-The specification requires every User to have a status controlled by a defined catalog and mentions conditions such as Active and Blocked.
+## Allowed Values
 
-## Used By
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `ACTIVE` | User is operational and may act according to their role. | Explicit wording |
+| `INACTIVE` | User is operationally disabled without being blocked. | Inferred |
+| `BLOCKED` | User is blocked from normal operation. | Explicit wording |
 
-- `User.status`
+## Business Rules
 
-## Currently Supported Evidence
-
-| Possible Code | Meaning | Status of Decision |
-|---|---|---|
-| `ACTIVE` | The User is operational. | Mentioned by the specification as an example. |
-| `BLOCKED` | The User is blocked from normal operation. | Mentioned by the specification as an example. |
-
-## Pending Definition
-
-- The specification uses the expression “Active, Blocked, etc.” and therefore does not define the complete catalog.
-- Additional values such as `INACTIVE` must not be added solely because they appeared in the banking example.
-- Valid status transitions are not defined.
-- The final Java implementation must wait until the complete catalog is confirmed.
+- Every User must have one non-null status.
+- Only active participants may execute protected operational actions in the implemented domain.
+- `UserStatus` is different from `BuyerStatus`.
 
 ---
 
@@ -117,20 +101,19 @@ The specification requires every User to have a status controlled by a defined c
 
 ## Description
 
-Represents the commercial condition of a Buyer and their ability to participate in purchasing processes.
+Represents the Buyer's commercial ability to participate in purchases.
 
-The functional specification explicitly requires the Buyer to have a commercial status, but it does not define the allowed values.
+## Allowed Values
 
-## Used By
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `ACTIVE` | Buyer is commercially enabled to purchase. | Inferred from required commercial status |
+| `SUSPENDED` | Buyer is temporarily prevented from purchasing. | Inferred from the commercial participation rule |
 
-- `Buyer.commercialStatus`
+## Business Rules
 
-## Pending Definition
-
-- No allowed BuyerStatus values are defined.
-- No valid status transitions are defined.
-- `BuyerStatus` remains a required but incomplete candidate Value Object.
-- It must not be replaced automatically by `UserStatus`, because operational User status and Buyer commercial status may represent different concepts.
+- A Buyer can confirm a purchase only when both `UserStatus` and `BuyerStatus` are `ACTIVE`.
+- A suspended Buyer may not create a formal Order from a Cart.
 
 ---
 
@@ -140,24 +123,18 @@ The functional specification explicitly requires the Buyer to have a commercial 
 
 Represents the owner classification of a Warehouse.
 
-The specification distinguishes Warehouses owned by the Marketplace from Warehouses associated with Sellers.
-
-## Used By
-
-- `Warehouse.ownerType`
-
 ## Allowed Values
 
-| Code | Name | Description | Source |
-|---|---|---|---|
-| `MARKETPLACE` | Marketplace Warehouse | Warehouse belonging to the centralized Marketplace operation. | Explicit |
-| `SELLER` | Seller Warehouse | Warehouse associated with a Seller. | Explicit |
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `MARKETPLACE` | Warehouse belonging to the centralized Marketplace operation. | Explicit |
+| `SELLER` | Warehouse associated with a Seller. | Explicit |
 
 ## Business Rules
 
-- Every Warehouse must have exactly one owner classification.
-- A Warehouse classified as `SELLER` must be associated with a Seller.
-- The specification does not define a separate Marketplace Entity to reference when the value is `MARKETPLACE`.
+- Every Warehouse has one owner classification.
+- A Seller may only be associated with `SELLER` Warehouses.
+- A Seller is incorporated with their first Seller Warehouse.
 
 ---
 
@@ -165,27 +142,14 @@ The specification distinguishes Warehouses owned by the Marketplace from Warehou
 
 ## Description
 
-Represents the commercial and operational nature of a Product.
-
-Product Type determines whether Inventory and physical dispatch are required.
-
-## Used By
-
-- `Product.productType`
+Determines the commercial and operational nature of a Product.
 
 ## Allowed Values
 
-| Code | Name | Description | Source |
-|---|---|---|---|
-| `PHYSICAL` | Physical Product | Product that requires Inventory management and physical dispatch. | Explicit |
-| `DIGITAL` | Digital Product | Product that may be delivered immediately after payment confirmation. | Explicit |
-
-## Business Rules
-
-- Every Product must have exactly one ProductType.
-- Physical Products require Inventory and dispatch.
-- Digital Products may be delivered immediately after payment confirmation.
-- The specification does not define the technical mechanism for delivering digital Products.
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `PHYSICAL` | Requires Inventory and physical dispatch. | Explicit |
+| `DIGITAL` | May be delivered after payment without physical dispatch. | Explicit |
 
 ---
 
@@ -193,26 +157,49 @@ Product Type determines whether Inventory and physical dispatch are required.
 
 ## Description
 
-Represents the commercial visibility and availability condition of a Product within the NexusMarket catalog.
-
-## Used By
-
-- `Product.status`
+Represents the commercial visibility and availability of a Product in the catalog.
 
 ## Allowed Values
 
-| Code | Name | Description | Source |
-|---|---|---|---|
-| `PUBLISHED` | Published | Product is visible in the public catalog. | Explicit |
-| `SUSPENDED` | Suspended | Product is temporarily suspended from normal catalog operation. | Explicit value; detailed behavior not defined |
-| `DISCONTINUED` | Discontinued | Product is no longer commercially continued. | Explicit value; detailed behavior not defined |
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `PUBLISHED` | Visible and selectable in the public catalog. | Explicit |
+| `SUSPENDED` | Temporarily unavailable in the catalog. | Explicit |
+| `DISCONTINUED` | Removed from continued commercialization. | Explicit |
 
 ## Business Rules
 
-- Every Product must have exactly one ProductStatus.
-- A Product with `PUBLISHED` status is visible in the public catalog.
-- Valid transitions between ProductStatus values are not defined.
-- Behavior for suspended or discontinued Products already included in a Cart or Order is not defined.
+- Only published Products may be added to a Cart.
+- Every Product must have one ProductType and one ProductStatus.
+
+---
+
+# ProductVariant
+
+## Description
+
+Represents a Product variation such as color, size, model, or a combination of characteristics.
+
+The specification provides examples but does not define a mandatory variant schema. Therefore, the implementation uses a required immutable description.
+
+## Java Representation
+
+```text
+ProductVariant
+  - description: String
+```
+
+## Business Rules
+
+- Description must not be null, empty, or blank.
+- Equality is based on the normalized description.
+- A Product must not contain duplicate variants.
+- ProductVariant is an immutable Value Object.
+
+## Source
+
+- Variant concept and examples: Explicit.
+- Description-based immutable representation: Inferred technical design.
 
 ---
 
@@ -220,29 +207,23 @@ Represents the commercial visibility and availability condition of a Product wit
 
 ## Description
 
-Represents the business reason for a change applied to Inventory.
-
-## Used By
-
-- Candidate `InventoryMovement` supporting Entity.
+Represents the reason or operation that produces an Inventory change.
 
 ## Allowed Values
 
-| Code | Name | Description | Source |
-|---|---|---|---|
-| `ENTRY` | Entry | Adds stock to Inventory. | Explicit |
-| `RESERVATION` | Reservation | Reserves available stock for a commercial process. | Explicit |
-| `SALE_EXIT` | Sale Exit | Removes stock as a consequence of a sale. | Explicit |
-| `ADJUSTMENT` | Adjustment | Corrects or adjusts Inventory stock. | Explicit |
-| `RETURN` | Return | Adds or processes stock resulting from a Return. | Explicit |
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `ENTRY` | Entry of stock into Inventory. | Explicit |
+| `RESERVATION` | Reservation of available stock. | Explicit |
+| `SALE_EXIT` | Stock exit caused by a sale. | Explicit |
+| `ADJUSTMENT` | Operational correction of Inventory. | Explicit |
+| `RETURN` | Stock entry associated with a Return. | Explicit |
 
 ## Business Rules
 
-- Every Inventory change must correspond to an allowed InventoryMovementType.
-- Inventory quantities must never become negative.
-- A Reservation must not be performed when stock does not exist.
-- Inventory marked as damaged must not be reserved.
-- The effect of each movement on available, reserved, damaged, or total quantities requires further definition.
+- Every InventoryMovement must use one of these values.
+- A movement references Inventory, a positive quantity, and the User who performed it.
+- Only an active Seller or Logistics Operator may register an Inventory movement.
 
 ---
 
@@ -250,25 +231,21 @@ Represents the business reason for a change applied to Inventory.
 
 ## Description
 
-Represents the operational condition of Inventory.
+Represents whether Inventory may participate in a reservation.
 
-This concept is inferred from the critical rule that Inventory marked as damaged must not be reserved.
+## Allowed Values
 
-## Used By
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `AVAILABLE` | Inventory may be reserved when sufficient quantity exists. | Inferred normal condition |
+| `DAMAGED` | Inventory cannot be reserved. | Explicit critical validation |
 
-- Candidate `Inventory.condition` attribute.
+## Business Rules
 
-## Currently Supported Evidence
-
-| Possible Code | Meaning | Status of Decision |
-|---|---|---|
-| `DAMAGED` | Inventory cannot be reserved because it is damaged. | Explicitly mentioned condition. |
-
-## Pending Definition
-
-- The complete InventoryCondition catalog is not defined.
-- Normal, available, reserved, or unavailable conditions must not be added automatically.
-- It must be confirmed whether damaged stock is represented through a condition, a separate quantity, or an Inventory Movement.
+- Inventory must always have one condition.
+- Damaged Inventory must not be reserved.
+- Inventory quantity must never become negative.
+- Nonexistent stock must not be reserved.
 
 ---
 
@@ -276,157 +253,126 @@ This concept is inferred from the critical rule that Inventory marked as damaged
 
 ## Description
 
-Represents the current stage of the Order lifecycle.
+Represents the current stage of the formal Order lifecycle.
 
-## Used By
+## Allowed Values
 
-- `Order.status`
+| Code | Meaning | Source |
+| --- | --- | --- |
+| `PENDING_PAYMENT` | Formal Order is waiting for payment confirmation. | Explicit |
+| `PAID` | Payment is confirmed and preparation may begin. | Explicit |
+| `DISPATCHED` | Physical Order has left the Warehouse. | Explicit |
+| `DELIVERED` | Delivery has been confirmed. | Explicit wording |
+| `FINALIZED` | Order is closed after delivery and becomes immutable. | Explicit wording and critical rule |
 
-## Lifecycle Defined by the Specification
+## Resolved Lifecycle
 
 ```text
-CART
-  |
-  v
-PENDING_PAYMENT
-  |
-  v
-PAID
-  |
-  v
-DISPATCHED
-  |
-  v
-DELIVERED / FINALIZED
+Cart --confirmation--> PENDING_PAYMENT
+                           |
+                           v
+                          PAID
+                           |
+             +-------------+-------------+
+             |                           |
+      Physical Order                Digital Order
+             |                           |
+             v                           |
+        DISPATCHED                       |
+             |                           |
+             +-------------> DELIVERED <-+
+                                  |
+                                  v
+                              FINALIZED
 ```
 
-## Allowed or Candidate Values
+## Resolved Decisions
 
-| Code | Name | Description | Status of Decision |
-|---|---|---|---|
-| `CART` | Cart | Provisional Product selection. | Explicit stage; representation is pending. |
-| `PENDING_PAYMENT` | Pending Payment | Waiting for financial confirmation. | Explicit |
-| `PAID` | Paid | Payment is confirmed and preparation begins. | Explicit |
-| `DISPATCHED` | Dispatched | Physical Order has left the Warehouse. | Explicit |
-| `DELIVERED` | Delivered | Delivery has been successfully completed. | Explicit wording |
-| `FINALIZED` | Finalized | Order is closed after confirmed delivery. | Explicit wording; separation from Delivered is unclear. |
-
-## Business Rules
-
-- Order state changes must follow the lifecycle defined by the specification.
-- A finalized Order must not be modified under any circumstance.
-- Payment confirmation initiates preparation.
-- Dispatch applies to physical Products.
-
-## Pending Definition
-
-- It must be confirmed whether `CART` is an OrderStatus or whether Cart is an independent Entity.
-- It must be confirmed whether `DELIVERED` and `FINALIZED` are separate states or two names for one final state.
-- The lifecycle for digital Products is not completely defined.
-- Invalid transition behavior is not defined.
+- `Cart` is an independent Entity and is not an OrderStatus.
+- `DELIVERED` and `FINALIZED` are separate states.
+- Digital-only Orders do not use `DISPATCHED`.
+- A finalized Order cannot change under any circumstance.
+- State transitions are controlled by Order behavior; no generic `setStatus` exists.
 
 ---
 
-# Concepts Not Yet Classified as Value Objects
+# Supporting Concepts Classified
 
-## ProductVariant
-
-The specification defines variants such as color, size, and model, but does not define their complete structure. `ProductVariant` may later become an Entity or Value Object.
-
-## CartItem
-
-`CartItem` represents a Product and quantity selected in a Cart. Its final classification as Entity or Value Object remains pending.
-
-## OrderItem
-
-`OrderItem` represents a Product and quantity included in an Order. Its final classification as Entity or Value Object remains pending.
-
-## Address
-
-The specification defines primary and additional Buyer addresses as data but does not require an `Address` Value Object. They remain Strings until additional structure is required.
-
----
-
-# Status Catalogs Not Supported by the Specification
-
-The following catalogs appeared in earlier proposals or may seem normal in a Marketplace, but their values are not defined by the official specification:
-
-## InvoiceStatus
-
-- No Invoice lifecycle or status values are defined.
-- Values such as `PENDING`, `PAID`, or `VOIDED` must not be adopted without confirmation.
-
-## ShipmentStatus
-
-- No Shipment lifecycle or status values are defined.
-- Preparation, dispatch, transport, and delivery are business activities, but the specification does not formally define them as ShipmentStatus values.
-
-## ReturnStatus
-
-- No Return lifecycle or status values are defined.
-- Approval, rejection, and completion values must not be invented.
-
-## RefundStatus
-
-- No Refund lifecycle or status values are defined.
-- Financial processing states must not be invented.
+| Concept | Classification | Rationale |
+| --- | --- | --- |
+| `ProductVariant` | Immutable Value Object | Defined by its descriptive value and has no independent lifecycle. |
+| `CartItem` | Mutable internal model of Cart | Quantity may change while the selection remains provisional. |
+| `OrderItem` | Immutable internal model of Order | Confirmed Product and quantity must not change with later Cart modifications. |
+| `Address` | String at this stage | The specification does not define a structured Address schema. |
 
 ---
 
 # Entity-to-Value-Object Mapping
 
-| Domain Entity | Value Object Attribute | Status |
-|---|---|---|
-| `User` | `SystemRole role` | Complete |
-| `User` | `UserStatus status` | Incomplete catalog |
-| `Buyer` | `BuyerStatus commercialStatus` | Incomplete catalog |
-| `Warehouse` | `WarehouseOwnerType ownerType` | Complete |
-| `Product` | `ProductType productType` | Complete |
-| `Product` | `ProductStatus status` | Complete |
-| `Inventory` | `InventoryCondition condition` | Inferred and incomplete |
-| `InventoryMovement` | `InventoryMovementType movementType` | Complete values; supporting Entity pending |
-| `Order` | `OrderStatus status` | Values partially ambiguous |
+| Domain Model | Value Object | Implementation Status |
+| --- | --- | --- |
+| `User` | `SystemRole` | Implemented |
+| `User` | `UserStatus` | Implemented |
+| `Buyer` | `BuyerStatus` | Implemented |
+| `Warehouse` | `WarehouseOwnerType` | Implemented |
+| `Product` | `ProductType` | Implemented |
+| `Product` | `ProductStatus` | Implemented |
+| `Product` | `ProductVariant` | Implemented |
+| `Inventory` | `InventoryCondition` | Implemented |
+| `InventoryMovement` | `InventoryMovementType` | Implemented |
+| `Order` | `OrderStatus` | Implemented |
 
 ---
 
-# Implementation Decision Pending
+# Deliberately Unsupported Catalogs
 
-The banking repository implements business catalogs as immutable classes derived from a `DomainCatalog` base class. Earlier classroom examples also used Java `enum` types for some statuses.
+The following catalogs are not implemented because the functional specification includes their business processes but does not define lifecycle values:
 
-For NexusMarket, the following decision remains pending:
+## InvoiceStatus
 
-```text
-Option A: Java enum
-Option B: Immutable Value Object class
-Option C: DomainCatalog hierarchy
-```
+Invoice exists as a Domain model associated with a paid Order, but no Invoice status catalog is defined.
 
-The final representation must be consistent across the NexusMarket domain and must follow the professor's delivery requirements.
+## ShipmentStatus
 
-Regardless of the Java representation, the business meaning and allowed values documented here remain part of the Domain Model.
+Shipment behavior derives dispatch and delivery information from OrderStatus. No independent Shipment status catalog is defined.
+
+## ReturnStatus
+
+Return exists as a Domain model for a delivered or finalized Order, but approval or rejection values are not defined.
+
+## RefundStatus
+
+Refund exists as a Domain model processed by an active Administrator, but financial processing states are not defined.
 
 ---
 
-# Pending Confirmations
+# Java Representation Decision
 
-1. Complete allowed values of `UserStatus`.
-2. Complete allowed values of `BuyerStatus`.
-3. Complete representation and values of `InventoryCondition`.
-4. Whether `CART` belongs to `OrderStatus` or to an independent Cart Entity.
-5. Whether `DELIVERED` and `FINALIZED` are separate Order statuses.
-6. Whether `ProductVariant`, `CartItem`, and `OrderItem` are Entities or Value Objects.
-7. Whether Invoice, Shipment, Return, and Refund require status catalogs.
-8. Whether Value Objects will be implemented as enums, immutable classes, or a DomainCatalog hierarchy.
+The implementation decision is resolved as follows:
+
+- Finite controlled catalogs use Java `enum`.
+- Structured Value Objects use immutable final classes.
+- `ProductVariant` implements value equality through `equals` and `hashCode`.
+- No Value Object contains Spring, persistence, or transport annotations.
+
+---
+
+# Remaining Open Questions
+
+The following items cannot be resolved from the current specification and remain outside the implemented Value Object scope:
+
+1. Whether Inventory will eventually be managed per Product or per ProductVariant.
+2. Whether Invoice, Shipment, Return, or Refund receive status catalogs in a future requirement.
+3. Whether Address receives a structured schema.
+4. Whether monetary concepts such as price, amount, tax, or refund amount will be formally specified.
 
 ---
 
 # Domain Value Object Design Rules
 
-- Do not represent controlled business concepts with arbitrary Strings.
-- Do not create allowed values that are not supported by the functional specification or professor clarification.
-- Keep complete catalogs separate from incomplete catalogs.
-- Value Objects must not depend on Spring, JPA, MongoDB, HTTP, or other infrastructure technologies.
-- Value Objects should be immutable.
-- Domain Entities must reference the appropriate Value Object type.
-- Status transitions must follow explicit business rules and must not be invented.
-- Technical enumerations must remain separate from business Value Objects when that distinction becomes necessary.
+- Controlled concepts must not use arbitrary Strings when a catalog is defined.
+- Explicit and inferred values must remain distinguishable in documentation.
+- Value Objects must be immutable.
+- Entity state transitions must use domain behavior rather than unrestricted setters.
+- Unsupported catalogs must not be invented.
+- New requirements must update this document before implementation.

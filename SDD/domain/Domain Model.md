@@ -93,7 +93,8 @@ The technical authentication mechanism is outside the functional specification. 
 - A User has exactly one `SystemRole`.
 - A User has exactly one `UserStatus`.
 - A User may participate in business operations according to their assigned role.
-- The relationship between `User`, `Buyer`, and `Seller` is pending detailed analysis.
+- `User` is an abstract Entity specialized by `Buyer`, `Seller`, `LogisticsOperator`, `Administrator`, and `Supervisor`.
+- Each concrete specialization returns exactly one `SystemRole`.
 
 ## Business Rules
 
@@ -109,7 +110,7 @@ The technical authentication mechanism is outside the functional specification. 
 
 - `User` is considered an Entity because it has a unique identity and maintains an operational state.
 - The specification does not define username, password, phone number, or address as general User attributes.
-- The inheritance structure of `User` has not yet been defined.
+- `User` is implemented as an abstract class. Identification is immutable, while full name, email, and operational status change through validated domain methods.
 
 ---
 
@@ -137,7 +138,7 @@ The functional specification describes Buyers as Users who make purchases. Howev
 - A Buyer creates or confirms `Order` instances.
 - A Buyer receives physical products through `Shipment` processes.
 - A Buyer may participate in `Return` and `Refund` processes.
-- The exact relationship between `Buyer` and `User` remains pending definition.
+- `Buyer` inherits from `User` and always returns the `BUYER` role.
 
 ## Business Rules
 
@@ -151,8 +152,8 @@ The functional specification describes Buyers as Users who make purchases. Howev
 
 ## Design Notes
 
-- `Buyer` is a candidate Entity because it maintains specific commercial information and participates throughout the purchasing process.
-- `BuyerStatus` is a candidate Value Object, but its allowed values are not defined by the specification.
+- `Buyer` is implemented as a User Entity specialization with primary address, additional addresses, and commercial status.
+- `BuyerStatus` is implemented with `ACTIVE` and `SUSPENDED`; both values are documented as domain inferences from commercial participation.
 - The specification does not define whether a Buyer has one active Cart or multiple Carts.
 - The inheritance or association between `Buyer` and `User` must be determined after analyzing the remaining participants.
 
@@ -172,7 +173,7 @@ The Seller cannot register themselves. Their incorporation into NexusMarket must
 
 The functional specification does not explicitly define Seller-specific attributes.
 
-General identification, name, email, role, and status information may belong to the associated `User`, but this relationship remains pending definition.
+General identification, name, email, role, and status information are inherited from `User`.
 
 ## Relationships
 
@@ -181,7 +182,7 @@ General identification, name, email, role, and status information may belong to 
 - A Seller participates in the administration of `Inventory`.
 - A Seller participates in the management of `Order` instances.
 - An Administrator registers the Seller and their first Warehouse.
-- The exact relationship between `Seller` and `User` remains pending definition.
+- `Seller` inherits from `User` and always returns the `SELLER` role.
 
 ## Business Rules
 
@@ -194,7 +195,7 @@ General identification, name, email, role, and status information may belong to 
 
 ## Design Notes
 
-- `Seller` is a candidate Entity because it maintains relationships with products, warehouses, inventory, and orders.
+- `Seller` is implemented as a User Entity specialization that manages Product and Warehouse collections.
 - The specification does not define specific Seller attributes such as registration date, business name, or seller identifier.
 - Attributes not supported by the specification must not be added without confirmation.
 - The inheritance or association between `Seller` and `User` will be determined after completing the participant analysis.
@@ -309,7 +310,7 @@ The functional specification defines the following Product Status values:
 - `Product` is a candidate Entity because it participates in the catalog, inventory, Cart, Order, and commercial lifecycle.
 - `ProductType` is a candidate Value Object.
 - `ProductStatus` is a candidate Value Object.
-- `ProductVariant` remains a candidate supporting class because the specification defines variants as a list but does not define their complete internal structure.
+- `ProductVariant` is implemented as an immutable Value Object whose required description may represent color, size, model, or a combination of characteristics.
 - Attributes such as name, description, price, category, or product identifier must not be added without further support or confirmation.
 
 ---
@@ -368,10 +369,10 @@ The functional specification defines the following movements:
 ## Design Notes
 
 - `Inventory` is a candidate Entity because it maintains operational stock for a Product in a specific Warehouse.
-- `InventoryMovementType` is a candidate Value Object.
-- `InventoryCondition` is a candidate Value Object inferred from the rule that damaged Inventory cannot be reserved.
+- `InventoryMovementType` is implemented as a controlled enum.
+- `InventoryCondition` is implemented with `AVAILABLE` and `DAMAGED`. `DAMAGED` is explicit and `AVAILABLE` is the inferred normal reservable condition.
 - The only condition explicitly mentioned by the specification is `DAMAGED`; the remaining allowed conditions are not defined.
-- `InventoryMovement` remains a candidate supporting Entity because Inventory changes require traceability, but its attributes are not specified.
+- `InventoryMovement` is implemented as an immutable traceability model containing Inventory, movement type, positive quantity, and the authorized User who performed it.
 - The specification does not define whether the combination of Product and Warehouse must be unique.
 - Separate fields such as `reservedQuantity`, `damagedQuantity`, and `totalQuantity` must not be added without further analysis or confirmation.
 
@@ -401,7 +402,7 @@ The functional specification does not explicitly define Cart attributes such as 
 - A Cart contains Products through Cart Item records.
 - A confirmed Cart initiates the formal Order process.
 - A Cart may contain physical and digital Products.
-- The exact relationship between Cart and Order remains pending definition.
+- `Cart` is an independent Entity. Confirming a non-empty Cart for an authorized Buyer creates an `Order` in `PENDING_PAYMENT` status.
 
 ## Business Rules
 
@@ -427,8 +428,8 @@ The complete Cart Item structure is not defined by the functional specification.
 
 ## Design Notes
 
-- `Cart` is a candidate Entity because it maintains the Buyer's provisional Product selection.
-- `CartItem` is a candidate supporting Entity or Value Object; its final classification remains pending.
+- `Cart` is implemented as an Entity that belongs to one Buyer and contains mutable `CartItem` models.
+- `CartItem` is classified as a mutable internal model because its quantity may change while the selection is provisional.
 - The specification presents Cart both as a separate managed process and as the first stage of the Order lifecycle.
 - It must be determined whether Cart is a separate Entity that produces an Order or whether it is represented directly as an initial Order state.
 - The specification does not define whether a Buyer may have one active Cart or multiple Carts.
@@ -463,7 +464,7 @@ The specification does not explicitly define attributes such as order identifier
 - A paid Order may generate billing information.
 - A physical Order participates in a Shipment process.
 - A delivered Order may participate in Return and Refund processes.
-- The exact transformation or transition between Cart and Order remains pending definition.
+- The implemented Order constructor copies Cart items into immutable OrderItems and leaves later Cart changes isolated from the formal Order.
 
 ## Business Rules
 
@@ -534,9 +535,9 @@ The functional specification does not explicitly define Order Item attributes su
 
 ## Design Notes
 
-- `Order` is considered a candidate Entity because it has a lifecycle, maintains commercial state, and participates in billing, logistics, returns, and refunds.
-- `OrderStatus` is a candidate Value Object.
-- `OrderItem` is a candidate supporting Entity or Value Object; its final classification remains pending.
+- `Order` is implemented as an Entity with a controlled lifecycle and without a generic status setter.
+- `OrderStatus` is implemented with `PENDING_PAYMENT`, `PAID`, `DISPATCHED`, `DELIVERED`, and `FINALIZED`.
+- `OrderItem` is classified as an immutable internal model of Order.
 - The document presents `CART` as an Order state while also defining Cart management as an independent process.
 - The Order lifecycle for digital Products requires further analysis because digital delivery may occur immediately after payment.
 - The specification does not define whether one Order may contain Products from multiple Sellers or Warehouses.
@@ -551,7 +552,7 @@ Represents the commercial billing information associated with a purchase made th
 
 The functional specification includes billing management as part of the Marketplace operation. However, it does not define the complete internal structure, lifecycle, or status values of an Invoice.
 
-Therefore, `Invoice` is initially considered a candidate Entity derived from the billing process.
+Therefore, `Invoice` is implemented as a Domain Entity associated with an Order after payment confirmation.
 
 ## Attributes
 
@@ -578,7 +579,7 @@ The specification does not explicitly define other Invoice attributes such as id
 
 ## Design Notes
 
-- `Invoice` is a candidate Entity inferred from the billing management process.
+- `Invoice` is an implemented Entity inferred from the billing management process.
 - The specification uses the business concept of billing but does not explicitly define an Invoice class.
 - No `InvoiceStatus` Value Object will be defined until its allowed values are supported or confirmed.
 - It must be confirmed whether an Order generates one Invoice or multiple Invoices.
@@ -623,7 +624,7 @@ The specification does not explicitly define Shipment attributes such as identif
 
 ## Design Notes
 
-- `Shipment` is a candidate Entity because it represents an operational process with relationships to Orders, Warehouses, Logistics Operators, and Buyers.
+- `Shipment` is an implemented Entity for the dispatch and delivery behavior of paid physical Orders.
 - The specification does not define a Shipment lifecycle or allowed Shipment statuses.
 - No `ShipmentStatus` Value Object will be defined until its values are supported or confirmed.
 - It must be confirmed whether one Order may produce multiple Shipments when Products are stored in different Warehouses.
@@ -664,7 +665,7 @@ The specification does not explicitly define attributes such as return identifie
 
 ## Design Notes
 
-- `Return` is a candidate Entity because it represents a post-sale business process related to an Order and Buyer.
+- `Return` is an implemented Entity related to a delivered or finalized Order and its Buyer.
 - No `ReturnStatus` Value Object will be defined until its allowed values are supported or confirmed.
 - Return deadlines, eligible Product conditions, required evidence, and approval responsibilities are not specified.
 
@@ -706,7 +707,7 @@ The specification does not explicitly define attributes such as refund identifie
 
 ## Design Notes
 
-- `Refund` is a candidate Entity because it represents a distinguishable post-sale commercial process.
+- `Refund` is an implemented Entity associated with a Return and processed by an active Administrator.
 - No `RefundStatus` Value Object will be defined until its values are supported or confirmed.
 - Refund amounts, partial Refunds, processing deadlines, and financial mechanisms are not specified.
 
@@ -724,8 +725,8 @@ The specification defines Product variants as a list but does not define their a
 
 ## Design Notes
 
-- `ProductVariant` remains a candidate supporting class.
-- Its classification as Entity or Value Object is pending.
+- `ProductVariant` is an implemented immutable Value Object.
+- Equality is based on its normalized description.
 - Variant attributes must not be invented until the required structure is confirmed.
 - It must be confirmed whether Inventory is managed per Product or per Product Variant.
 
@@ -745,8 +746,8 @@ The specification explicitly defines the following movement types:
 
 ## Design Notes
 
-- `InventoryMovement` is a candidate supporting Entity because Inventory changes may require operational traceability.
-- `InventoryMovementType` is a candidate Value Object with values explicitly supported by the specification.
+- `InventoryMovement` is an implemented supporting domain model for operational traceability.
+- `InventoryMovementType` is an implemented Value Object enum with values explicitly supported by the specification.
 - Movement attributes such as quantity, date, performed User, reason, and resulting stock are not defined.
 
 # Administrative Report
@@ -766,11 +767,14 @@ Represents the administrative consultation capability required to consolidate Ma
 # Global Domain Relationships
 
 ```text
-User
+User (abstract)
   |-- has one --> SystemRole
   |-- has one --> UserStatus
-  |-- may represent or relate to --> Buyer
-  `-- may represent or relate to --> Seller
+  |-- specialized by --> Buyer
+  |-- specialized by --> Seller
+  |-- specialized by --> LogisticsOperator
+  |-- specialized by --> Administrator
+  `-- specialized by --> Supervisor
 
 Buyer
   |-- uses --> Cart
@@ -811,27 +815,43 @@ Order
   `-- may participate in --> Refund
 ```
 
-This relationship structure is provisional. Exact cardinalities and inheritance decisions remain pending where the functional specification does not provide enough information.
+This relationship structure is implemented for the first delivery. Cardinalities that require identifiers, persistence design, or additional commercial attributes remain open.
 
 ---
 
-# Candidate Value Objects
+# Implemented Value Objects
 
-The Domain Model identifies the following controlled business concepts as candidate Value Objects:
+The first delivery implements the following controlled business concepts. Explicit and inferred values are detailed in `Domain Value Objects.md`.
 
-| Value Object | Supported Values or Current Status |
+| Value Object | Implemented Values or Structure |
 |---|---|
 | `SystemRole` | `BUYER`, `SELLER`, `LOGISTICS_OPERATOR`, `ADMINISTRATOR`, `SUPERVISOR` |
-| `UserStatus` | The specification mentions values such as Active and Blocked, but does not define the complete catalog. |
-| `BuyerStatus` | Commercial status is explicit, but its allowed values are not defined. |
+| `UserStatus` | `ACTIVE`, `INACTIVE`, `BLOCKED` |
+| `BuyerStatus` | `ACTIVE`, `SUSPENDED` |
 | `WarehouseOwnerType` | `MARKETPLACE`, `SELLER` |
 | `ProductType` | `PHYSICAL`, `DIGITAL` |
 | `ProductStatus` | `PUBLISHED`, `SUSPENDED`, `DISCONTINUED` |
+| `ProductVariant` | Immutable description-based Value Object |
 | `InventoryMovementType` | `ENTRY`, `RESERVATION`, `SALE_EXIT`, `ADJUSTMENT`, `RETURN` |
-| `InventoryCondition` | `DAMAGED` is mentioned; the complete catalog is not defined. |
-| `OrderStatus` | `CART`, `PENDING_PAYMENT`, `PAID`, `DISPATCHED`, `DELIVERED` / `FINALIZED` |
+| `InventoryCondition` | `AVAILABLE`, `DAMAGED` |
+| `OrderStatus` | `PENDING_PAYMENT`, `PAID`, `DISPATCHED`, `DELIVERED`, `FINALIZED` |
 
-Value Objects whose complete allowed values are not defined must remain pending and must not be completed by assumption.
+`InvoiceStatus`, `ShipmentStatus`, `ReturnStatus`, and `RefundStatus` are deliberately not implemented because their allowed values are not defined.
+
+---
+
+# Implementation Status
+
+The following domain models are implemented in plain Java:
+
+- `User`, `Buyer`, `Seller`, `LogisticsOperator`, `Administrator`, and `Supervisor`.
+- `Warehouse`, `Product`, `Inventory`, and `InventoryMovement`.
+- `Cart`, `CartItem`, `Order`, and `OrderItem`.
+- `Invoice`, `Shipment`, `Return`, and `Refund`.
+
+The implementation has automated unit coverage for entity creation, required data, authorization, Inventory constraints, Cart behavior, Order transitions, billing eligibility, physical Shipment flow, Return eligibility, and Refund processing.
+
+At the current delivery checkpoint, Maven executes 102 tests with zero failures and zero errors. One generated Spring application-context test is temporarily skipped until database configuration is introduced.
 
 ---
 
@@ -857,24 +877,19 @@ Value Objects whose complete allowed values are not defined must remain pending 
 
 ---
 
-# Pending Decisions and Required Confirmations
+# Remaining Open Decisions
 
-The following decisions cannot be resolved exclusively from the functional specification:
+The first implementation resolves the inheritance, Cart, Order lifecycle, supporting-item classification, and operational status decisions. The following questions remain because the specification provides no sufficient basis for a definitive choice:
 
-1. Whether `Buyer` and `Seller` inherit from `User` or are profiles associated with a User.
-2. Whether `Cart` is an independent Entity or the initial state of an Order.
-3. Whether `DELIVERED` and `FINALIZED` are separate Order states.
-4. Whether `ProductVariant`, `CartItem`, and `OrderItem` are Entities or Value Objects.
-5. The complete allowed values of `UserStatus`, `BuyerStatus`, and `InventoryCondition`.
-6. Whether one Order may contain Products from multiple Sellers.
-7. Whether one Order may contain Products from multiple Warehouses.
-8. Whether one Order may generate multiple Invoices or Shipments.
-9. Whether Inventory is managed per Product or per Product Variant.
-10. The attributes and lifecycle of Invoice, Shipment, Return, and Refund.
-11. Whether Administrator, Logistics Operator, and Supervisor require independent domain classes or remain only `SystemRole` values.
-12. The exact cardinalities not explicitly defined by the specification.
+1. Whether one Order may contain Products from multiple Sellers.
+2. Whether one Order may contain Products from multiple Warehouses.
+3. Whether one Order may generate multiple Invoices or Shipments.
+4. Whether Inventory will eventually be managed per Product or per ProductVariant.
+5. Additional attributes for Product, Invoice, Shipment, Return, and Refund.
+6. Independent status catalogs for Invoice, Shipment, Return, and Refund.
+7. Exact persistence identifiers and cardinalities not explicitly defined by the specification.
 
-These points must be confirmed through additional requirements or direct clarification from the professor before final Java implementation.
+These unresolved points are not silently implemented. Future requirements must update this model before the corresponding behavior is added.
 
 ---
 
@@ -888,4 +903,3 @@ These points must be confirmed through additional requirements or direct clarifi
 - Controlled roles, statuses, and types must not be represented by arbitrary Strings.
 - Business rules must remain in the Domain and must not be delegated to controllers or persistence technology.
 - Technical authentication, database design, API contracts, and infrastructure details are outside this Domain Model stage.
-
