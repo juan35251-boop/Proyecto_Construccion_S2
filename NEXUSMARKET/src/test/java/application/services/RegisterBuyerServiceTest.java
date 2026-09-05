@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -214,7 +215,8 @@ class RegisterBuyerServiceTest {
     private static class InMemoryUserRepository
             implements UserRepository {
 
-        private final List<User> users = new ArrayList<>();
+        private final List<User> users =
+                new ArrayList<>();
 
         @Override
         public boolean existsByIdentification(
@@ -240,6 +242,26 @@ class RegisterBuyerServiceTest {
             }
 
             return false;
+        }
+
+        @Override
+        public Optional<User> findByIdentification(
+                String identification
+        ) {
+            for (User user : users) {
+                if (user.getIdentification().equals(
+                        identification
+                )) {
+                    return Optional.of(user);
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        @Override
+        public List<User> findAll() {
+            return List.copyOf(users);
         }
 
         @Override

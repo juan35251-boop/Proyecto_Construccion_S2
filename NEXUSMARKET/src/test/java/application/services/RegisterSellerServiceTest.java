@@ -12,25 +12,24 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas unitarias del servicio encargado de registrar vendedores.
- *
- * Se utiliza un repositorio en memoria para probar el servicio sin
- * conectarlo todavía con una base de datos real.
+ * Pruebas unitarias del servicio encargado
+ * de registrar vendedores.
  */
 class RegisterSellerServiceTest {
 
     /**
-     * Comprueba que un administrador activo pueda registrar un vendedor.
+     * Verifica que un administrador activo pueda
+     * registrar un vendedor.
      */
     @Test
-    void shouldRegisterSellerWhenAdministratorIsActive() {
+    void shouldRegisterSellerByActiveAdministrator() {
         InMemoryUserRepository repository =
                 new InMemoryUserRepository();
 
@@ -40,32 +39,28 @@ class RegisterSellerServiceTest {
         Administrator administrator =
                 createAdministrator(UserStatus.ACTIVE);
 
-        Warehouse warehouse =
-                new Warehouse(WarehouseOwnerType.SELLER);
+        Warehouse warehouse = createSellerWarehouse();
 
         Seller seller = service.register(
                 administrator,
                 "2001",
-                "Vendedor Nexus",
-                "seller@nexusmarket.com",
+                "Test Seller",
+                "seller@email.com",
                 UserStatus.ACTIVE,
                 warehouse
         );
 
         assertEquals("2001", seller.getIdentification());
-        assertEquals("Vendedor Nexus", seller.getFullName());
-        assertEquals(
-                "seller@nexusmarket.com",
-                seller.getEmail()
-        );
+        assertEquals("Test Seller", seller.getFullName());
+        assertEquals("seller@email.com", seller.getEmail());
         assertEquals(UserStatus.ACTIVE, seller.getStatus());
         assertEquals(SystemRole.SELLER, seller.getRole());
         assertTrue(seller.managesWarehouse(warehouse));
-        assertSame(seller, repository.getLastSavedUser());
+        assertTrue(repository.contains(seller));
     }
 
     /**
-     * Comprueba que el servicio no pueda crearse sin repositorio.
+     * Verifica que el repositorio sea obligatorio.
      */
     @Test
     void shouldRejectNullRepository() {
@@ -76,40 +71,33 @@ class RegisterSellerServiceTest {
     }
 
     /**
-     * Comprueba que el registro requiera un administrador.
+     * Verifica que el registro requiera
+     * un administrador.
      */
     @Test
     void shouldRejectNullAdministrator() {
-        RegisterSellerService service =
-                new RegisterSellerService(
-                        new InMemoryUserRepository()
-                );
+        RegisterSellerService service = createService();
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.register(
                         null,
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
-                        new Warehouse(
-                                WarehouseOwnerType.SELLER
-                        )
+                        createSellerWarehouse()
                 )
         );
     }
 
     /**
-     * Comprueba que un administrador inactivo no pueda
-     * registrar vendedores.
+     * Verifica que un administrador inactivo
+     * no pueda registrar vendedores.
      */
     @Test
     void shouldRejectInactiveAdministrator() {
-        RegisterSellerService service =
-                new RegisterSellerService(
-                        new InMemoryUserRepository()
-                );
+        RegisterSellerService service = createService();
 
         Administrator administrator =
                 createAdministrator(UserStatus.INACTIVE);
@@ -119,26 +107,21 @@ class RegisterSellerServiceTest {
                 () -> service.register(
                         administrator,
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
-                        new Warehouse(
-                                WarehouseOwnerType.SELLER
-                        )
+                        createSellerWarehouse()
                 )
         );
     }
 
     /**
-     * Comprueba que un administrador bloqueado no pueda
-     * registrar vendedores.
+     * Verifica que un administrador bloqueado
+     * no pueda registrar vendedores.
      */
     @Test
     void shouldRejectBlockedAdministrator() {
-        RegisterSellerService service =
-                new RegisterSellerService(
-                        new InMemoryUserRepository()
-                );
+        RegisterSellerService service = createService();
 
         Administrator administrator =
                 createAdministrator(UserStatus.BLOCKED);
@@ -148,113 +131,106 @@ class RegisterSellerServiceTest {
                 () -> service.register(
                         administrator,
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
-                        new Warehouse(
-                                WarehouseOwnerType.SELLER
-                        )
+                        createSellerWarehouse()
                 )
         );
     }
 
     /**
-     * Comprueba que no puedan existir dos usuarios con
-     * la misma identificación.
+     * Verifica que la identificación del vendedor
+     * no pueda estar registrada previamente.
      */
     @Test
     void shouldRejectDuplicatedIdentification() {
         InMemoryUserRepository repository =
                 new InMemoryUserRepository();
 
+        RegisterSellerService service =
+                new RegisterSellerService(repository);
+
         repository.save(
                 new Administrator(
                         "2001",
-                        "Administrador existente",
-                        "existing@nexusmarket.com",
+                        "Existing User",
+                        "existing@email.com",
                         UserStatus.ACTIVE
                 )
         );
-
-        RegisterSellerService service =
-                new RegisterSellerService(repository);
 
         assertThrows(
                 IllegalStateException.class,
                 () -> service.register(
                         createAdministrator(UserStatus.ACTIVE),
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
-                        new Warehouse(
-                                WarehouseOwnerType.SELLER
-                        )
+                        createSellerWarehouse()
                 )
         );
 
-        assertEquals(1, repository.size());
+        assertEquals(1, repository.findAll().size());
     }
 
     /**
-     * Comprueba que no puedan existir dos usuarios con
-     * el mismo correo electrónico.
+     * Verifica que el correo electrónico del vendedor
+     * no pueda estar registrado previamente.
      */
     @Test
     void shouldRejectDuplicatedEmail() {
         InMemoryUserRepository repository =
                 new InMemoryUserRepository();
 
+        RegisterSellerService service =
+                new RegisterSellerService(repository);
+
         repository.save(
                 new Administrator(
-                        "1002",
-                        "Administrador existente",
-                        "seller@nexusmarket.com",
+                        "5001",
+                        "Existing User",
+                        "seller@email.com",
                         UserStatus.ACTIVE
                 )
         );
-
-        RegisterSellerService service =
-                new RegisterSellerService(repository);
 
         assertThrows(
                 IllegalStateException.class,
                 () -> service.register(
                         createAdministrator(UserStatus.ACTIVE),
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
-                        new Warehouse(
-                                WarehouseOwnerType.SELLER
-                        )
+                        createSellerWarehouse()
                 )
         );
 
-        assertEquals(1, repository.size());
+        assertEquals(1, repository.findAll().size());
     }
 
     /**
-     * Comprueba que el vendedor no pueda registrarse con una
-     * bodega perteneciente al marketplace.
+     * Verifica que un vendedor solamente pueda registrarse
+     * con una bodega perteneciente a vendedores.
      */
     @Test
     void shouldRejectMarketplaceWarehouse() {
-        RegisterSellerService service =
-                new RegisterSellerService(
-                        new InMemoryUserRepository()
-                );
+        RegisterSellerService service = createService();
 
         Warehouse marketplaceWarehouse =
-                new Warehouse(WarehouseOwnerType.MARKETPLACE);
+                new Warehouse(
+                        WarehouseOwnerType.MARKETPLACE
+                );
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.register(
                         createAdministrator(UserStatus.ACTIVE),
                         "2001",
-                        "Vendedor Nexus",
-                        "seller@nexusmarket.com",
+                        "Test Seller",
+                        "seller@email.com",
                         UserStatus.ACTIVE,
                         marketplaceWarehouse
                 )
@@ -262,43 +238,90 @@ class RegisterSellerServiceTest {
     }
 
     /**
-     * Crea un administrador para reutilizarlo en las pruebas.
+     * Crea el servicio con un repositorio en memoria.
+     */
+    private RegisterSellerService createService() {
+        return new RegisterSellerService(
+                new InMemoryUserRepository()
+        );
+    }
+
+    /**
+     * Crea un administrador con el estado indicado.
      */
     private Administrator createAdministrator(
             UserStatus status
     ) {
         return new Administrator(
-                "1001",
-                "Administrador Nexus",
-                "admin@nexusmarket.com",
+                "4001",
+                "Administrator",
+                "admin@email.com",
                 status
         );
     }
 
     /**
-     * Implementación sencilla de UserRepository que almacena
-     * usuarios en una lista durante las pruebas.
+     * Crea una bodega perteneciente a un vendedor.
+     */
+    private Warehouse createSellerWarehouse() {
+        return new Warehouse(
+                WarehouseOwnerType.SELLER
+        );
+    }
+
+    /**
+     * Repositorio de usuarios utilizado durante las pruebas.
      */
     private static class InMemoryUserRepository
             implements UserRepository {
 
-        private final List<User> users = new ArrayList<>();
+        private final List<User> users =
+                new ArrayList<>();
 
         @Override
         public boolean existsByIdentification(
                 String identification
         ) {
-            return users.stream().anyMatch(
-                    user -> user.getIdentification()
-                            .equals(identification)
-            );
+            for (User user : users) {
+                if (user.getIdentification().equals(
+                        identification
+                )) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         @Override
         public boolean existsByEmail(String email) {
-            return users.stream().anyMatch(
-                    user -> user.getEmail().equals(email)
-            );
+            for (User user : users) {
+                if (user.getEmail().equals(email)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        @Override
+        public Optional<User> findByIdentification(
+                String identification
+        ) {
+            for (User user : users) {
+                if (user.getIdentification().equals(
+                        identification
+                )) {
+                    return Optional.of(user);
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        @Override
+        public List<User> findAll() {
+            return List.copyOf(users);
         }
 
         @Override
@@ -306,19 +329,8 @@ class RegisterSellerServiceTest {
             users.add(user);
         }
 
-        /**
-         * Obtiene el último usuario guardado para comprobar
-         * el resultado de la prueba.
-         */
-        public User getLastSavedUser() {
-            return users.get(users.size() - 1);
-        }
-
-        /**
-         * Obtiene la cantidad de usuarios almacenados.
-         */
-        public int size() {
-            return users.size();
+        boolean contains(User user) {
+            return users.contains(user);
         }
     }
 }
