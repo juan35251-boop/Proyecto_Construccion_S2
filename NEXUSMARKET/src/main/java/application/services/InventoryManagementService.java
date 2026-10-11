@@ -8,17 +8,23 @@ import application.domain.models.User;
 import application.domain.valueobjects.InventoryCondition;
 import application.domain.valueobjects.InventoryMovementType;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.InventoryManagementUseCase;
 import application.ports.output.InventoryMovementRepository;
 import application.ports.output.InventoryRepository;
 
 /**
  * Servicio de aplicación encargado de gestionar el inventario.
  *
- * Coordina los cambios en las cantidades disponibles, comprueba
- * los permisos del usuario y registra los movimientos que sirven
- * como evidencia de cada operación.
+ * Implementa el puerto de entrada InventoryManagementUseCase,
+ * permitiendo administrar el inventario sin depender
+ * directamente de esta implementación.
+ *
+ * Coordina los cambios en las cantidades disponibles,
+ * comprueba los permisos del usuario y registra los
+ * movimientos que sirven como evidencia.
  */
-public class InventoryManagementService {
+public class InventoryManagementService
+        implements InventoryManagementUseCase {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryMovementRepository movementRepository;
@@ -50,6 +56,7 @@ public class InventoryManagementService {
      * @param quantity cantidad que ingresa
      * @return movimiento generado
      */
+    @Override
     public InventoryMovement registerEntry(
             User performedBy,
             Inventory inventory,
@@ -63,7 +70,11 @@ public class InventoryManagementService {
         );
 
         inventory.addQuantity(quantity);
-        saveOperation(inventory, movement);
+
+        saveOperation(
+                inventory,
+                movement
+        );
 
         return movement;
     }
@@ -79,6 +90,7 @@ public class InventoryManagementService {
      * @param quantity cantidad que se desea reservar
      * @return movimiento generado
      */
+    @Override
     public InventoryMovement reserveQuantity(
             User performedBy,
             Inventory inventory,
@@ -92,7 +104,11 @@ public class InventoryManagementService {
         );
 
         inventory.reserveQuantity(quantity);
-        saveOperation(inventory, movement);
+
+        saveOperation(
+                inventory,
+                movement
+        );
 
         return movement;
     }
@@ -101,14 +117,16 @@ public class InventoryManagementService {
      * Ajusta la cantidad disponible a un nuevo valor.
      *
      * El movimiento almacena la diferencia entre la cantidad
-     * anterior y la nueva cantidad. No se registra un ajuste
-     * si ambas cantidades son iguales.
+     * anterior y la nueva cantidad.
+     *
+     * No se registra un ajuste si ambas cantidades son iguales.
      *
      * @param performedBy usuario que realiza el ajuste
      * @param inventory inventario que será ajustado
      * @param newQuantity nueva cantidad disponible
      * @return movimiento generado
      */
+    @Override
     public InventoryMovement adjustQuantity(
             User performedBy,
             Inventory inventory,
@@ -137,7 +155,11 @@ public class InventoryManagementService {
         );
 
         inventory.adjustQuantity(newQuantity);
-        saveOperation(inventory, movement);
+
+        saveOperation(
+                inventory,
+                movement
+        );
 
         return movement;
     }
@@ -150,6 +172,7 @@ public class InventoryManagementService {
      * @param quantity cantidad devuelta
      * @return movimiento generado
      */
+    @Override
     public InventoryMovement registerReturn(
             User performedBy,
             Inventory inventory,
@@ -163,7 +186,11 @@ public class InventoryManagementService {
         );
 
         inventory.addQuantity(quantity);
-        saveOperation(inventory, movement);
+
+        saveOperation(
+                inventory,
+                movement
+        );
 
         return movement;
     }
@@ -171,26 +198,41 @@ public class InventoryManagementService {
     /**
      * Cambia la condición operativa del inventario.
      *
-     * Permite marcarlo, por ejemplo, como disponible o dañado.
+     * Permite marcarlo, por ejemplo, como disponible
+     * o dañado.
+     *
+     * Esta operación no modifica cantidades y, por lo tanto,
+     * no genera un movimiento de inventario.
      *
      * @param performedBy usuario que realiza el cambio
      * @param inventory inventario que será modificado
      * @param newCondition nueva condición
      */
+    @Override
     public void changeCondition(
             User performedBy,
             Inventory inventory,
             InventoryCondition newCondition
     ) {
-        validateInventoryAccess(performedBy, inventory);
+        validateInventoryAccess(
+                performedBy,
+                inventory
+        );
 
         inventory.changeCondition(newCondition);
         inventoryRepository.save(inventory);
     }
 
     /**
-     * Crea un movimiento después de verificar que el usuario
-     * tenga permiso sobre el inventario específico.
+     * Crea un movimiento después de verificar
+     * que el usuario tenga permiso sobre el
+     * inventario específico.
+     *
+     * @param performedBy usuario responsable
+     * @param inventory inventario afectado
+     * @param movementType tipo de movimiento
+     * @param quantity cantidad involucrada
+     * @return movimiento creado
      */
     private InventoryMovement createMovement(
             User performedBy,
@@ -198,7 +240,10 @@ public class InventoryManagementService {
             InventoryMovementType movementType,
             int quantity
     ) {
-        validateInventoryAccess(performedBy, inventory);
+        validateInventoryAccess(
+                performedBy,
+                inventory
+        );
 
         return new InventoryMovement(
                 inventory,
@@ -211,8 +256,12 @@ public class InventoryManagementService {
     /**
      * Guarda el inventario actualizado y su movimiento.
      *
-     * Cuando se implemente la infraestructura, ambas operaciones
-     * deberán ejecutarse dentro de una misma transacción.
+     * Cuando se implemente la infraestructura, ambas
+     * operaciones deberán ejecutarse dentro de una
+     * misma transacción.
+     *
+     * @param inventory inventario actualizado
+     * @param movement movimiento generado
      */
     private void saveOperation(
             Inventory inventory,
@@ -224,6 +273,9 @@ public class InventoryManagementService {
 
     /**
      * Valida que los repositorios requeridos estén disponibles.
+     *
+     * @param inventoryRepository repositorio de inventarios
+     * @param movementRepository repositorio de movimientos
      */
     private void validateRepositories(
             InventoryRepository inventoryRepository,
@@ -244,6 +296,8 @@ public class InventoryManagementService {
 
     /**
      * Valida que el inventario exista.
+     *
+     * @param inventory inventario que será validado
      */
     private void validateInventory(Inventory inventory) {
         if (inventory == null) {
@@ -255,6 +309,8 @@ public class InventoryManagementService {
 
     /**
      * Valida que la nueva cantidad no sea negativa.
+     *
+     * @param quantity cantidad que será validada
      */
     private void validateNonNegativeQuantity(int quantity) {
         if (quantity < 0) {
@@ -269,8 +325,13 @@ public class InventoryManagementService {
      * el inventario específico.
      *
      * Un vendedor solamente puede administrar sus propios
-     * productos y bodegas. Un operador logístico solamente
-     * puede administrar bodegas del Marketplace.
+     * productos y bodegas.
+     *
+     * Un operador logístico solamente puede administrar
+     * bodegas del Marketplace.
+     *
+     * @param user usuario que realiza la operación
+     * @param inventory inventario administrado
      */
     private void validateInventoryAccess(
             User user,
@@ -311,6 +372,8 @@ public class InventoryManagementService {
     /**
      * Comprueba que el usuario esté activo y pertenezca
      * a uno de los roles autorizados para gestionar inventario.
+     *
+     * @param user usuario que realiza la operación
      */
     private void validateAuthorizedUser(User user) {
         if (user == null) {

@@ -6,6 +6,7 @@ import application.domain.models.OrderItem;
 import application.domain.models.Seller;
 import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.InvoiceQueryUseCase;
 import application.ports.output.InvoiceQueryRepository;
 
 import java.util.List;
@@ -13,21 +14,31 @@ import java.util.List;
 /**
  * Servicio encargado de consultar facturas.
  *
+ * Implementa el puerto de entrada InvoiceQueryUseCase,
+ * permitiendo consultar facturas sin depender directamente
+ * de esta implementación.
+ *
  * Permisos:
  *
  * - El comprador consulta sus propias facturas.
- * - El vendedor consulta facturas relacionadas con sus productos.
- * - El administrador y el supervisor consultan todas las facturas.
- * - El operador logístico no administra información financiera.
+ * - El vendedor consulta facturas relacionadas
+ *   con sus productos.
+ * - El administrador consulta todas las facturas.
+ * - El supervisor consulta todas las facturas.
+ * - El operador logístico no administra
+ *   información financiera.
  */
-public class InvoiceQueryService {
+public class InvoiceQueryService
+        implements InvoiceQueryUseCase {
 
-    private final InvoiceQueryRepository invoiceQueryRepository;
+    private final InvoiceQueryRepository
+            invoiceQueryRepository;
 
     /**
      * Construye el servicio con el repositorio requerido.
      *
-     * @param invoiceQueryRepository repositorio de consulta de facturas
+     * @param invoiceQueryRepository repositorio
+     *                               de consulta de facturas
      */
     public InvoiceQueryService(
             InvoiceQueryRepository invoiceQueryRepository
@@ -38,7 +49,8 @@ public class InvoiceQueryService {
             );
         }
 
-        this.invoiceQueryRepository = invoiceQueryRepository;
+        this.invoiceQueryRepository =
+                invoiceQueryRepository;
     }
 
     /**
@@ -47,6 +59,7 @@ public class InvoiceQueryService {
      * @param requestedBy usuario que realiza la consulta
      * @return facturas autorizadas
      */
+    @Override
     public List<Invoice> findAccessibleInvoices(
             User requestedBy
     ) {
@@ -55,16 +68,31 @@ public class InvoiceQueryService {
         List<Invoice> invoices =
                 invoiceQueryRepository.findAll();
 
+        /*
+         * Administradores y supervisores pueden
+         * consultar todas las facturas.
+         */
         if (hasGlobalAccess(requestedBy)) {
             return List.copyOf(invoices);
         }
 
+        /*
+         * El comprador solamente puede consultar
+         * las facturas que le pertenecen.
+         */
         if (requestedBy instanceof Buyer buyer) {
             return invoices.stream()
-                    .filter(invoice -> invoice.getBuyer() == buyer)
+                    .filter(
+                            invoice ->
+                                    invoice.getBuyer() == buyer
+                    )
                     .toList();
         }
 
+        /*
+         * El vendedor consulta facturas que contengan
+         * por lo menos uno de sus productos.
+         */
         if (requestedBy instanceof Seller seller) {
             return invoices.stream()
                     .filter(
@@ -77,20 +105,31 @@ public class InvoiceQueryService {
                     .toList();
         }
 
+        /*
+         * El operador logístico y los demás roles
+         * no tienen acceso a la información financiera.
+         */
         throw new IllegalStateException(
                 "User is not authorized to query invoices."
         );
     }
 
     /**
-     * Comprueba si la factura contiene productos del vendedor.
+     * Comprueba si la factura contiene productos
+     * pertenecientes al vendedor.
+     *
+     * @param invoice factura consultada
+     * @param seller vendedor que realiza la consulta
+     * @return true si contiene un producto del vendedor
      */
     private boolean containsSellerProduct(
             Invoice invoice,
             Seller seller
     ) {
         for (OrderItem item : invoice.getItems()) {
-            if (seller.managesProduct(item.getProduct())) {
+            if (seller.managesProduct(
+                    item.getProduct()
+            )) {
                 return true;
             }
         }
@@ -100,8 +139,12 @@ public class InvoiceQueryService {
 
     /**
      * Valida que quien consulta sea un usuario activo.
+     *
+     * @param requestedBy usuario solicitante
      */
-    private void validateActiveRequester(User requestedBy) {
+    private void validateActiveRequester(
+            User requestedBy
+    ) {
         if (requestedBy == null) {
             throw new IllegalArgumentException(
                     "Requesting user must not be null."
@@ -116,10 +159,16 @@ public class InvoiceQueryService {
     }
 
     /**
-     * Administradores y supervisores tienen acceso global de lectura.
+     * Indica si el usuario tiene acceso global
+     * de lectura sobre las facturas.
+     *
+     * @param user usuario que realiza la consulta
+     * @return true si es administrador o supervisor
      */
     private boolean hasGlobalAccess(User user) {
-        return user.getRole() == SystemRole.ADMINISTRATOR
-                || user.getRole() == SystemRole.SUPERVISOR;
+        return user.getRole()
+                == SystemRole.ADMINISTRATOR
+                || user.getRole()
+                == SystemRole.SUPERVISOR;
     }
 }

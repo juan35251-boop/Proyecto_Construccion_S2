@@ -4,53 +4,59 @@ import application.domain.models.Administrator;
 import application.domain.models.Seller;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.UserStatus;
+import application.ports.input.RegisterSellerUseCase;
 import application.ports.output.UserRepository;
 
 /**
  * Servicio de aplicación encargado de registrar vendedores
  * dentro de NexusMarket.
  *
- * De acuerdo con la regla del negocio, un vendedor no puede
- * registrarse por sí mismo. El registro debe ser realizado por
- * un administrador activo.
+ * Implementa el puerto de entrada RegisterSellerUseCase,
+ * permitiendo que los futuros controladores utilicen este
+ * caso de uso sin depender directamente de su implementación.
  *
- * El servicio también comprueba que la identificación y el correo
- * electrónico no estén registrados previamente.
+ * De acuerdo con la regla del negocio, un vendedor no puede
+ * registrarse por sí mismo. El registro debe ser realizado
+ * por un administrador activo.
+ *
+ * El servicio también comprueba que la identificación y el
+ * correo electrónico no estén registrados previamente.
  */
-public class RegisterSellerService {
+public class RegisterSellerService
+        implements RegisterSellerUseCase {
 
     /**
-     * Puerto utilizado para consultar y guardar usuarios.
+     * Puerto de salida utilizado para consultar
+     * y guardar usuarios.
      */
     private final UserRepository userRepository;
 
     /**
-     * Crea el servicio con el repositorio de usuarios requerido.
+     * Construye el servicio con el repositorio requerido.
      *
-     * La dependencia se recibe mediante el constructor para mantener
-     * el servicio desacoplado de la base de datos.
+     * La dependencia se recibe mediante el constructor para
+     * mantener el servicio independiente de MySQL, MongoDB
+     * o cualquier tecnología de almacenamiento.
      *
-     * @param userRepository repositorio utilizado para administrar usuarios
+     * @param userRepository repositorio utilizado para
+     *                       administrar usuarios
      *
      * @throws IllegalArgumentException si el repositorio es nulo
      */
-    public RegisterSellerService(UserRepository userRepository) {
-        if (userRepository == null) {
-            throw new IllegalArgumentException(
-                    "User repository must not be null."
-            );
-        }
-
+    public RegisterSellerService(
+            UserRepository userRepository
+    ) {
+        validateRepository(userRepository);
         this.userRepository = userRepository;
     }
 
     /**
      * Registra un nuevo vendedor.
      *
-     * Primero valida que la operación sea realizada por un administrador
-     * activo. Después crea el vendedor, comprueba la unicidad de su
-     * identificación y correo, y finalmente solicita al repositorio
-     * que lo guarde.
+     * Primero valida que la operación sea realizada por un
+     * administrador activo. Después crea el vendedor, comprueba
+     * la unicidad de su identificación y correo, y finalmente
+     * solicita al repositorio que lo guarde.
      *
      * @param administrator administrador que realiza el registro
      * @param identification identificación del nuevo vendedor
@@ -58,14 +64,14 @@ public class RegisterSellerService {
      * @param email correo electrónico del nuevo vendedor
      * @param status estado inicial del nuevo vendedor
      * @param firstWarehouse primera bodega del vendedor
-     * @return el vendedor registrado
+     * @return vendedor registrado
      *
-     * @throws IllegalArgumentException si el administrador es nulo
-     * @throws IllegalStateException si el administrador no está activo
-     * @throws IllegalArgumentException si algún dato del vendedor es inválido
-     * @throws IllegalStateException si la identificación ya está registrada
-     * @throws IllegalStateException si el correo ya está registrado
+     * @throws IllegalArgumentException si el administrador
+     *         o algún dato obligatorio es inválido
+     * @throws IllegalStateException si el administrador no está
+     *         activo o los datos ya están registrados
      */
+    @Override
     public Seller register(
             Administrator administrator,
             String identification,
@@ -76,6 +82,11 @@ public class RegisterSellerService {
     ) {
         validateAdministrator(administrator);
 
+        /*
+         * Seller valida internamente los datos generales
+         * del usuario y que la primera bodega pertenezca
+         * a un vendedor.
+         */
         Seller seller = new Seller(
                 identification,
                 fullName,
@@ -92,21 +103,38 @@ public class RegisterSellerService {
                 seller.getEmail()
         );
 
+        /*
+         * El servicio utiliza el puerto de salida sin conocer
+         * la tecnología donde se almacenará el vendedor.
+         */
         userRepository.save(seller);
 
         return seller;
     }
 
     /**
-     * Valida que la operación sea realizada por un administrador activo.
+     * Valida que el repositorio requerido exista.
      *
-     * No es necesario comprobar el rol manualmente porque el parámetro
-     * solamente acepta objetos de tipo {@link Administrator}.
+     * @param userRepository repositorio de usuarios
+     */
+    private void validateRepository(
+            UserRepository userRepository
+    ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+    }
+
+    /**
+     * Valida que la operación sea realizada
+     * por un administrador activo.
+     *
+     * No es necesario comprobar manualmente el rol porque
+     * el parámetro solamente admite objetos Administrator.
      *
      * @param administrator administrador que ejecuta la operación
-     *
-     * @throws IllegalArgumentException si el administrador es nulo
-     * @throws IllegalStateException si el administrador no está activo
      */
     private void validateAdministrator(
             Administrator administrator
@@ -125,16 +153,17 @@ public class RegisterSellerService {
     }
 
     /**
-     * Valida que la identificación no pertenezca a otro usuario.
+     * Valida que la identificación no pertenezca
+     * a otro usuario.
      *
      * @param identification identificación que se desea validar
-     *
-     * @throws IllegalStateException si la identificación ya está registrada
      */
     private void validateUniqueIdentification(
             String identification
     ) {
-        if (userRepository.existsByIdentification(identification)) {
+        if (userRepository.existsByIdentification(
+                identification
+        )) {
             throw new IllegalStateException(
                     "Identification is already registered."
             );
@@ -142,11 +171,10 @@ public class RegisterSellerService {
     }
 
     /**
-     * Valida que el correo electrónico no pertenezca a otro usuario.
+     * Valida que el correo electrónico no pertenezca
+     * a otro usuario.
      *
      * @param email correo electrónico que se desea validar
-     *
-     * @throws IllegalStateException si el correo ya está registrado
      */
     private void validateUniqueEmail(String email) {
         if (userRepository.existsByEmail(email)) {

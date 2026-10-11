@@ -1,22 +1,29 @@
 package application.services;
 
 import application.domain.models.Order;
+import application.ports.input.CompleteOrderUseCase;
 import application.ports.output.OrderRepository;
 
 /**
  * Servicio de aplicación encargado de finalizar pedidos.
  *
- * La finalización representa el cierre satisfactorio del pedido
- * después de que su entrega haya sido confirmada.
+ * Implementa el puerto de entrada CompleteOrderUseCase,
+ * permitiendo solicitar la finalización de una orden sin
+ * depender directamente de esta implementación.
+ *
+ * La finalización representa el cierre satisfactorio
+ * del pedido después de confirmar su entrega.
  */
-public class CompleteOrderService {
+public class CompleteOrderService
+        implements CompleteOrderUseCase {
 
     private final OrderRepository orderRepository;
 
     /**
      * Construye el servicio con el repositorio de pedidos.
      *
-     * @param orderRepository repositorio utilizado para guardar pedidos
+     * @param orderRepository repositorio utilizado
+     *                        para guardar pedidos
      */
     public CompleteOrderService(
             OrderRepository orderRepository
@@ -28,16 +35,28 @@ public class CompleteOrderService {
     /**
      * Finaliza un pedido que ya fue entregado.
      *
-     * El modelo Order valida que solamente un pedido con estado
-     * DELIVERED pueda cambiar al estado FINALIZED.
+     * El modelo Order valida que solamente un pedido
+     * con estado DELIVERED pueda cambiar al estado FINALIZED.
      *
      * @param order pedido que se desea finalizar
      * @return pedido finalizado
      */
+    @Override
     public Order complete(Order order) {
         validateOrder(order);
 
+        /*
+         * Order protege su propio ciclo de vida
+         * y valida la transición:
+         *
+         * DELIVERED -> FINALIZED
+         */
         order.finalizeOrder();
+
+        /*
+         * Se almacena el nuevo estado del pedido
+         * mediante el puerto de salida.
+         */
         orderRepository.save(order);
 
         return order;
@@ -45,6 +64,8 @@ public class CompleteOrderService {
 
     /**
      * Valida que el repositorio exista.
+     *
+     * @param orderRepository repositorio de pedidos
      */
     private void validateRepository(
             OrderRepository orderRepository
@@ -58,6 +79,8 @@ public class CompleteOrderService {
 
     /**
      * Valida que exista un pedido para finalizar.
+     *
+     * @param order pedido que será validado
      */
     private void validateOrder(Order order) {
         if (order == null) {

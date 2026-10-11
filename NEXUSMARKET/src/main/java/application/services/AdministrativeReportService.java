@@ -2,24 +2,35 @@ package application.services;
 
 import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.AdministrativeReportUseCase;
 import application.ports.output.AdministrativeReportQueryRepository;
 import application.services.results.AdministrativeReport;
 
 /**
  * Servicio encargado de generar el reporte administrativo.
  *
- * El administrador puede utilizarlo para gestionar la operación.
+ * Implementa el puerto de entrada
+ * AdministrativeReportUseCase, permitiendo generar reportes
+ * sin depender directamente de esta implementación.
+ *
+ * El administrador puede utilizarlo para gestionar
+ * la operación.
+ *
  * El supervisor puede consultarlo para realizar monitoreo.
+ *
  * Los demás participantes no tienen acceso global.
  */
-public class AdministrativeReportService {
+public class AdministrativeReportService
+        implements AdministrativeReportUseCase {
 
-    private final AdministrativeReportQueryRepository reportRepository;
+    private final AdministrativeReportQueryRepository
+            reportRepository;
 
     /**
      * Construye el servicio con el puerto de reporte.
      *
-     * @param reportRepository repositorio de consulta consolidada
+     * @param reportRepository repositorio
+     *                         de consulta consolidada
      */
     public AdministrativeReportService(
             AdministrativeReportQueryRepository reportRepository
@@ -30,7 +41,8 @@ public class AdministrativeReportService {
             );
         }
 
-        this.reportRepository = reportRepository;
+        this.reportRepository =
+                reportRepository;
     }
 
     /**
@@ -39,11 +51,19 @@ public class AdministrativeReportService {
      * @param requestedBy usuario que solicita el reporte
      * @return indicadores operativos del Marketplace
      */
+    @Override
     public AdministrativeReport generate(
             User requestedBy
     ) {
         validateRequester(requestedBy);
 
+        /*
+         * La creación técnica del reporte se delega
+         * al puerto de salida.
+         *
+         * Su futura implementación podrá consultar
+         * una o varias bases de datos.
+         */
         AdministrativeReport report =
                 reportRepository.generateReport();
 
@@ -57,7 +77,10 @@ public class AdministrativeReportService {
     }
 
     /**
-     * Valida que el solicitante esté activo y tenga permisos globales.
+     * Valida que el solicitante esté activo
+     * y tenga permisos globales.
+     *
+     * @param requestedBy usuario que solicita el reporte
      */
     private void validateRequester(User requestedBy) {
         if (requestedBy == null) {

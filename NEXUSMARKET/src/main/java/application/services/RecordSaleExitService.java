@@ -10,21 +10,29 @@ import application.domain.models.User;
 import application.domain.valueobjects.InventoryMovementType;
 import application.domain.valueobjects.OrderStatus;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.RecordSaleExitUseCase;
 import application.ports.output.InventoryMovementRepository;
 
 /**
- * Servicio encargado de registrar una salida de inventario por venta.
+ * Servicio encargado de registrar una salida
+ * de inventario por venta.
+ *
+ * Implementa el puerto de entrada RecordSaleExitUseCase,
+ * permitiendo registrar la salida física sin depender
+ * directamente de esta implementación.
  *
  * La salida se registra cuando el pedido ya fue despachado.
- * No se vuelve a restar la cantidad disponible porque las unidades
- * fueron descontadas previamente durante la reserva.
+ * No se vuelve a restar la cantidad disponible porque las
+ * unidades fueron descontadas previamente durante la reserva.
  */
-public class RecordSaleExitService {
+public class RecordSaleExitService
+        implements RecordSaleExitUseCase {
 
     private final InventoryMovementRepository movementRepository;
 
     /**
-     * Construye el servicio con el repositorio de movimientos.
+     * Construye el servicio con el repositorio
+     * de movimientos.
      *
      * @param movementRepository repositorio de movimientos
      */
@@ -49,6 +57,7 @@ public class RecordSaleExitService {
      * @param quantity cantidad que salió de la bodega
      * @return movimiento registrado
      */
+    @Override
     public InventoryMovement record(
             User performedBy,
             Order order,
@@ -60,9 +69,22 @@ public class RecordSaleExitService {
         validateInventory(inventory);
         validateQuantity(quantity);
         validateDispatchedOrder(order);
-        validateInventoryAccess(performedBy, inventory);
-        validateProductAndQuantity(order, inventory, quantity);
 
+        validateInventoryAccess(
+                performedBy,
+                inventory
+        );
+
+        validateProductAndQuantity(
+                order,
+                inventory,
+                quantity
+        );
+
+        /*
+         * El movimiento registra la salida física,
+         * pero no vuelve a disminuir la cantidad disponible.
+         */
         InventoryMovement movement =
                 new InventoryMovement(
                         inventory,
@@ -77,7 +99,10 @@ public class RecordSaleExitService {
     }
 
     /**
-     * Valida que el usuario pueda registrar movimientos.
+     * Valida que el usuario pueda registrar
+     * movimientos de salida.
+     *
+     * @param user usuario que realiza la operación
      */
     private void validateAuthorizedUser(User user) {
         if (user == null) {
@@ -108,6 +133,8 @@ public class RecordSaleExitService {
 
     /**
      * Valida que el pedido exista.
+     *
+     * @param order pedido relacionado con la salida
      */
     private void validateOrder(Order order) {
         if (order == null) {
@@ -119,6 +146,8 @@ public class RecordSaleExitService {
 
     /**
      * Valida que el inventario exista.
+     *
+     * @param inventory inventario del producto
      */
     private void validateInventory(Inventory inventory) {
         if (inventory == null) {
@@ -130,6 +159,8 @@ public class RecordSaleExitService {
 
     /**
      * Valida que la cantidad sea positiva.
+     *
+     * @param quantity cantidad que salió de la bodega
      */
     private void validateQuantity(int quantity) {
         if (quantity <= 0) {
@@ -140,7 +171,9 @@ public class RecordSaleExitService {
     }
 
     /**
-     * La salida física se registra después del despacho.
+     * Comprueba que la orden ya haya sido despachada.
+     *
+     * @param order pedido relacionado con la salida
      */
     private void validateDispatchedOrder(Order order) {
         if (order.getStatus() != OrderStatus.DISPATCHED) {
@@ -151,7 +184,11 @@ public class RecordSaleExitService {
     }
 
     /**
-     * Comprueba que el usuario tenga acceso al inventario específico.
+     * Comprueba que el usuario tenga acceso
+     * al inventario específico.
+     *
+     * @param user usuario que realiza la operación
+     * @param inventory inventario administrado
      */
     private void validateInventoryAccess(
             User user,
@@ -187,8 +224,13 @@ public class RecordSaleExitService {
     }
 
     /**
-     * Comprueba que el pedido contenga el producto y que
-     * la cantidad registrada no supere la cantidad comprada.
+     * Comprueba que el pedido contenga el producto
+     * y que la cantidad registrada no supere la
+     * cantidad comprada.
+     *
+     * @param order pedido relacionado con la venta
+     * @param inventory inventario del producto
+     * @param quantity cantidad registrada
      */
     private void validateProductAndQuantity(
             Order order,
@@ -198,7 +240,9 @@ public class RecordSaleExitService {
         int orderedQuantity = 0;
 
         for (OrderItem item : order.getItems()) {
-            if (item.belongsTo(inventory.getProduct())) {
+            if (item.belongsTo(
+                    inventory.getProduct()
+            )) {
                 orderedQuantity += item.getQuantity();
             }
         }

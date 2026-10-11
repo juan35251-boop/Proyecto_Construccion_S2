@@ -1,11 +1,16 @@
 package application.services;
 
 import application.domain.models.Order;
+import application.ports.input.DeliverDigitalOrderUseCase;
 import application.ports.output.OrderRepository;
 
 /**
  * Servicio de aplicación encargado de confirmar
  * la entrega de pedidos exclusivamente digitales.
+ *
+ * Implementa el puerto de entrada DeliverDigitalOrderUseCase,
+ * permitiendo ejecutar la entrega digital sin depender
+ * directamente de esta implementación.
  *
  * Un pedido digital no necesita una dirección física,
  * una bodega ni un proceso de despacho. Después de que
@@ -15,6 +20,7 @@ import application.ports.output.OrderRepository;
  * Este servicio representa la entrega desde el punto de
  * vista del negocio. Actualmente no envía físicamente un
  * archivo, una licencia ni un enlace por correo electrónico.
+ *
  * Esa entrega técnica podrá implementarse posteriormente
  * mediante un puerto y un adaptador especializado.
  *
@@ -22,7 +28,8 @@ import application.ports.output.OrderRepository;
  * deben utilizar el proceso de envíos, incluso si también
  * incluyen productos digitales.
  */
-public class DeliverDigitalOrderService {
+public class DeliverDigitalOrderService
+        implements DeliverDigitalOrderUseCase {
 
     private final OrderRepository orderRepository;
 
@@ -32,7 +39,7 @@ public class DeliverDigitalOrderService {
      *
      * @param orderRepository repositorio de pedidos
      *
-     * @throws IllegalArgumentException si el repositorio es null
+     * @throws IllegalArgumentException si el repositorio es nulo
      */
     public DeliverDigitalOrderService(
             OrderRepository orderRepository
@@ -42,32 +49,35 @@ public class DeliverDigitalOrderService {
     }
 
     /**
-     * Confirma la entrega de un pedido exclusivamente digital.
+     * Confirma la entrega de un pedido
+     * exclusivamente digital.
      *
-     * Para completar la operación deben cumplirse estas reglas:
+     * Para completar la operación deben cumplirse
+     * estas reglas:
      *
      * 1. El pedido debe existir.
      * 2. No debe contener productos físicos.
      * 3. Su pago debe haber sido confirmado.
      *
      * La comprobación del pago se realiza dentro del modelo
-     * Order mediante markAsDelivered(). Para un pedido digital,
-     * ese método solamente permite la transición:
+     * Order mediante markAsDelivered().
+     *
+     * Para un pedido digital, ese método solamente
+     * permite la transición:
      *
      * PAID -> DELIVERED
      *
-     * No se valida la dirección del comprador porque no existe
-     * un envío físico. La información necesaria para una futura
-     * entrega técnica podrá ser el correo electrónico, una cuenta
-     * de usuario o un enlace de descarga.
+     * No se valida la dirección del comprador porque no
+     * existe un envío físico.
      *
      * @param order pedido digital que se desea entregar
      * @return pedido actualizado en estado DELIVERED
      *
-     * @throws IllegalArgumentException si el pedido es null
+     * @throws IllegalArgumentException si el pedido es nulo
      * @throws IllegalStateException si contiene productos físicos
-     * @throws IllegalStateException si el pedido todavía no está pagado
+     * @throws IllegalStateException si el pedido no está pagado
      */
+    @Override
     public Order deliver(Order order) {
         validateOrder(order);
         validateDigitalOnlyOrder(order);
@@ -124,9 +134,10 @@ public class DeliverDigitalOrderService {
     /**
      * Comprueba que el pedido sea exclusivamente digital.
      *
-     * No basta con que tenga algún producto digital. Si el pedido
-     * contiene al menos un producto físico, se considera mixto y
-     * debe pasar por el proceso de preparación y despacho.
+     * No basta con que tenga algún producto digital.
+     * Si el pedido contiene al menos un producto físico,
+     * se considera mixto y debe pasar por el proceso de
+     * preparación y despacho.
      *
      * @param order pedido que será validado
      */

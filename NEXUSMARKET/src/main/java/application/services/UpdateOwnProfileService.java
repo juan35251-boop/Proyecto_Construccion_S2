@@ -1,17 +1,23 @@
 package application.services;
 
 import application.domain.models.User;
+import application.ports.input.UpdateOwnProfileUseCase;
 import application.ports.output.UserRepository;
 
 /**
  * Servicio de aplicación encargado de actualizar
  * el perfil propio de un usuario.
  *
+ * Implementa el puerto de entrada UpdateOwnProfileUseCase,
+ * permitiendo actualizar el perfil sin depender
+ * directamente de esta implementación.
+ *
  * Todos los roles pueden cambiar su nombre y correo mientras
  * tengan un estado activo. La identificación, el rol y el estado
  * operativo no se modifican mediante este servicio.
  */
-public class UpdateOwnProfileService {
+public class UpdateOwnProfileService
+        implements UpdateOwnProfileUseCase {
 
     private final UserRepository userRepository;
 
@@ -29,16 +35,18 @@ public class UpdateOwnProfileService {
     }
 
     /**
-     * Actualiza el nombre y el correo electrónico del usuario.
+     * Actualiza el nombre y el correo electrónico
+     * del usuario.
      *
-     * El correo nuevo debe continuar siendo único dentro
-     * de toda la plataforma.
+     * El correo nuevo debe continuar siendo único
+     * dentro de toda la plataforma.
      *
      * @param user usuario que actualiza su propio perfil
      * @param newFullName nuevo nombre completo
      * @param newEmail nuevo correo electrónico
      * @return usuario actualizado
      */
+    @Override
     public User update(
             User user,
             String newFullName,
@@ -49,13 +57,24 @@ public class UpdateOwnProfileService {
 
         /*
          * Se validan ambos datos antes de modificar el objeto.
+         *
          * Esto evita cambiar el nombre si después descubrimos
-         * que el correo no es válido.
+         * que el correo electrónico no es válido.
          */
-        validateText(newFullName, "Full name");
-        validateText(newEmail, "Email");
+        validateText(
+                newFullName,
+                "Full name"
+        );
 
-        validateUniqueEmail(user, newEmail);
+        validateText(
+                newEmail,
+                "Email"
+        );
+
+        validateUniqueEmail(
+                user,
+                newEmail
+        );
 
         user.changeFullName(newFullName);
         user.changeEmail(newEmail);
@@ -67,6 +86,8 @@ public class UpdateOwnProfileService {
 
     /**
      * Valida que el repositorio exista.
+     *
+     * @param userRepository repositorio de usuarios
      */
     private void validateRepository(
             UserRepository userRepository
@@ -80,6 +101,8 @@ public class UpdateOwnProfileService {
 
     /**
      * Valida que exista un usuario.
+     *
+     * @param user usuario que será validado
      */
     private void validateUser(User user) {
         if (user == null) {
@@ -91,6 +114,8 @@ public class UpdateOwnProfileService {
 
     /**
      * Comprueba que el usuario tenga un estado activo.
+     *
+     * @param user usuario que actualiza su perfil
      */
     private void validateActiveUser(User user) {
         if (!user.isActive()) {
@@ -102,6 +127,9 @@ public class UpdateOwnProfileService {
 
     /**
      * Valida que un texto obligatorio tenga contenido.
+     *
+     * @param value texto que será validado
+     * @param fieldName nombre del campo
      */
     private void validateText(
             String value,
@@ -120,6 +148,9 @@ public class UpdateOwnProfileService {
      *
      * Si el correo no cambió, no se considera duplicado
      * porque continúa perteneciendo al mismo usuario.
+     *
+     * @param user usuario que actualiza su perfil
+     * @param newEmail nuevo correo electrónico
      */
     private void validateUniqueEmail(
             User user,

@@ -4,23 +4,30 @@ import application.domain.models.Product;
 import application.domain.models.Seller;
 import application.domain.valueobjects.ProductStatus;
 import application.domain.valueobjects.ProductVariant;
+import application.ports.input.ProductCatalogUseCase;
 import application.ports.output.ProductRepository;
 
 /**
  * Servicio de aplicación encargado de administrar
  * los productos del catálogo de un vendedor.
  *
+ * Implementa el puerto de entrada ProductCatalogUseCase,
+ * permitiendo administrar el catálogo sin depender
+ * directamente de esta implementación.
+ *
  * Permite agregar o eliminar variantes y cambiar
  * el estado de un producto.
  */
-public class ProductCatalogService {
+public class ProductCatalogService
+        implements ProductCatalogUseCase {
 
     private final ProductRepository productRepository;
 
     /**
      * Construye el servicio con el repositorio de productos.
      *
-     * @param productRepository repositorio utilizado para actualizar productos
+     * @param productRepository repositorio utilizado
+     *                          para actualizar productos
      */
     public ProductCatalogService(
             ProductRepository productRepository
@@ -37,14 +44,23 @@ public class ProductCatalogService {
      * @param variant variante que se desea agregar
      * @return producto actualizado
      */
+    @Override
     public Product addVariant(
             Seller seller,
             Product product,
             ProductVariant variant
     ) {
-        validateProductManagement(seller, product);
+        validateProductManagement(
+                seller,
+                product
+        );
 
+        /*
+         * Product valida que la variante exista
+         * y que no se encuentre repetida.
+         */
         product.addVariant(variant);
+
         productRepository.save(product);
 
         return product;
@@ -58,14 +74,19 @@ public class ProductCatalogService {
      * @param variant variante que se desea eliminar
      * @return true si la variante existía y fue eliminada
      */
+    @Override
     public boolean removeVariant(
             Seller seller,
             Product product,
             ProductVariant variant
     ) {
-        validateProductManagement(seller, product);
+        validateProductManagement(
+                seller,
+                product
+        );
 
-        boolean removed = product.removeVariant(variant);
+        boolean removed =
+                product.removeVariant(variant);
 
         /*
          * Solo se guarda el producto cuando realmente
@@ -89,14 +110,23 @@ public class ProductCatalogService {
      * @param newStatus nuevo estado
      * @return producto actualizado
      */
+    @Override
     public Product changeStatus(
             Seller seller,
             Product product,
             ProductStatus newStatus
     ) {
-        validateProductManagement(seller, product);
+        validateProductManagement(
+                seller,
+                product
+        );
 
+        /*
+         * Product valida que el nuevo estado
+         * no sea nulo.
+         */
         product.changeStatus(newStatus);
+
         productRepository.save(product);
 
         return product;
@@ -104,6 +134,8 @@ public class ProductCatalogService {
 
     /**
      * Valida que el repositorio exista.
+     *
+     * @param productRepository repositorio de productos
      */
     private void validateRepository(
             ProductRepository productRepository
@@ -118,6 +150,9 @@ public class ProductCatalogService {
     /**
      * Comprueba que el vendedor esté activo y que administre
      * el producto sobre el cual realiza la operación.
+     *
+     * @param seller vendedor que realiza la operación
+     * @param product producto administrado
      */
     private void validateProductManagement(
             Seller seller,

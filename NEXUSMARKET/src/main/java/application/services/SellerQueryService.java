@@ -3,6 +3,7 @@ package application.services;
 import application.domain.models.Seller;
 import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.SellerQueryUseCase;
 import application.ports.output.UserRepository;
 
 import java.util.List;
@@ -10,23 +11,31 @@ import java.util.List;
 /**
  * Servicio de aplicación encargado de consultar vendedores.
  *
+ * Implementa el puerto de entrada SellerQueryUseCase,
+ * permitiendo consultar vendedores sin depender
+ * directamente de esta implementación.
+ *
  * Aplica las restricciones de acceso según el rol:
  *
- * - Un vendedor solamente puede consultar su propia información.
+ * - Un vendedor solamente puede consultar su información.
  * - Un administrador puede consultar cualquier vendedor.
  * - Un supervisor puede consultar vendedores para monitoreo.
  * - Los demás roles no pueden consultar esta información.
  */
-public class SellerQueryService {
+public class SellerQueryService
+        implements SellerQueryUseCase {
 
     private final UserRepository userRepository;
 
     /**
      * Construye el servicio con el repositorio de usuarios.
      *
-     * @param userRepository repositorio utilizado para consultar usuarios
+     * @param userRepository repositorio utilizado
+     *                       para consultar usuarios
      */
-    public SellerQueryService(UserRepository userRepository) {
+    public SellerQueryService(
+            UserRepository userRepository
+    ) {
         if (userRepository == null) {
             throw new IllegalArgumentException(
                     "User repository must not be null."
@@ -43,6 +52,7 @@ public class SellerQueryService {
      * @param identification identificación del vendedor
      * @return vendedor encontrado
      */
+    @Override
     public Seller findByIdentification(
             User requestedBy,
             String identification
@@ -50,6 +60,10 @@ public class SellerQueryService {
         validateActiveRequester(requestedBy);
         validateIdentification(identification);
 
+        /*
+         * Primero se consulta un usuario mediante
+         * la identificación proporcionada.
+         */
         User foundUser = userRepository
                 .findByIdentification(identification)
                 .orElseThrow(
@@ -58,13 +72,20 @@ public class SellerQueryService {
                         )
                 );
 
+        /*
+         * Se comprueba que el usuario encontrado
+         * realmente sea un vendedor.
+         */
         if (!(foundUser instanceof Seller seller)) {
             throw new IllegalStateException(
                     "The requested user is not a seller."
             );
         }
 
-        validateSellerAccess(requestedBy, seller);
+        validateSellerAccess(
+                requestedBy,
+                seller
+        );
 
         return seller;
     }
@@ -72,16 +93,21 @@ public class SellerQueryService {
     /**
      * Obtiene todos los vendedores registrados.
      *
-     * Esta consulta solamente puede ser realizada por un
-     * administrador o supervisor activo.
+     * Esta consulta solamente puede ser realizada por
+     * un administrador o supervisor activo.
      *
      * @param requestedBy usuario que solicita la información
      * @return lista de vendedores
      */
+    @Override
     public List<Seller> findAll(User requestedBy) {
         validateActiveRequester(requestedBy);
         validateGlobalAccess(requestedBy);
 
+        /*
+         * Se consultan todos los usuarios y se conservan
+         * solamente los que son vendedores.
+         */
         return userRepository.findAll()
                 .stream()
                 .filter(Seller.class::isInstance)
@@ -90,9 +116,14 @@ public class SellerQueryService {
     }
 
     /**
-     * Valida que el usuario que consulta exista y esté activo.
+     * Valida que el usuario que consulta exista
+     * y esté activo.
+     *
+     * @param requestedBy usuario que realiza la consulta
      */
-    private void validateActiveRequester(User requestedBy) {
+    private void validateActiveRequester(
+            User requestedBy
+    ) {
         if (requestedBy == null) {
             throw new IllegalArgumentException(
                     "Requesting user must not be null."
@@ -108,8 +139,12 @@ public class SellerQueryService {
 
     /**
      * Valida que la identificación tenga contenido.
+     *
+     * @param identification identificación consultada
      */
-    private void validateIdentification(String identification) {
+    private void validateIdentification(
+            String identification
+    ) {
         if (identification == null
                 || identification.isBlank()) {
             throw new IllegalArgumentException(
@@ -120,6 +155,9 @@ public class SellerQueryService {
 
     /**
      * Comprueba el acceso a un vendedor específico.
+     *
+     * @param requestedBy usuario que realiza la consulta
+     * @param seller vendedor consultado
      */
     private void validateSellerAccess(
             User requestedBy,
@@ -130,7 +168,8 @@ public class SellerQueryService {
                         && requestedBy.getIdentification()
                         .equals(seller.getIdentification());
 
-        if (!isSameSeller && !hasGlobalAccess(requestedBy)) {
+        if (!isSameSeller
+                && !hasGlobalAccess(requestedBy)) {
             throw new IllegalStateException(
                     "User is not authorized to query this seller."
             );
@@ -139,8 +178,12 @@ public class SellerQueryService {
 
     /**
      * Comprueba que el usuario tenga acceso global.
+     *
+     * @param requestedBy usuario que realiza la consulta
      */
-    private void validateGlobalAccess(User requestedBy) {
+    private void validateGlobalAccess(
+            User requestedBy
+    ) {
         if (!hasGlobalAccess(requestedBy)) {
             throw new IllegalStateException(
                     "User is not authorized to query all sellers."
@@ -149,12 +192,19 @@ public class SellerQueryService {
     }
 
     /**
-     * El administrador y el supervisor tienen acceso global
-     * de consulta, pero esta autorización no les permite modificar
-     * información fuera de sus responsabilidades.
+     * Indica si el usuario posee acceso global
+     * de consulta.
+     *
+     * Esta autorización no permite modificar información
+     * fuera de sus responsabilidades.
+     *
+     * @param user usuario que realiza la consulta
+     * @return true si es administrador o supervisor
      */
     private boolean hasGlobalAccess(User user) {
-        return user.getRole() == SystemRole.ADMINISTRATOR
-                || user.getRole() == SystemRole.SUPERVISOR;
+        return user.getRole()
+                == SystemRole.ADMINISTRATOR
+                || user.getRole()
+                == SystemRole.SUPERVISOR;
     }
 }

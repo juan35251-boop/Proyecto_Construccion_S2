@@ -9,6 +9,7 @@ import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.InventoryCondition;
 import application.domain.valueobjects.InventoryMovementType;
+import application.ports.input.RegisterInventoryUseCase;
 import application.ports.output.InventoryMovementRepository;
 import application.ports.output.InventoryRepository;
 
@@ -16,10 +17,15 @@ import application.ports.output.InventoryRepository;
  * Servicio de aplicación encargado de registrar
  * el inventario inicial de un producto.
  *
+ * Implementa el puerto de entrada RegisterInventoryUseCase,
+ * permitiendo que los futuros controladores ejecuten esta
+ * operación mediante un contrato independiente.
+ *
  * También comprueba que cada usuario solamente administre
  * las bodegas y productos correspondientes a su responsabilidad.
  */
-public class RegisterInventoryService {
+public class RegisterInventoryService
+        implements RegisterInventoryUseCase {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryMovementRepository movementRepository;
@@ -46,6 +52,9 @@ public class RegisterInventoryService {
     /**
      * Registra el inventario de un producto en una bodega.
      *
+     * El producto debe ser físico. El usuario debe ser un
+     * vendedor autorizado o un operador logístico autorizado.
+     *
      * @param performedBy usuario que realiza el registro
      * @param product producto almacenado
      * @param warehouse bodega donde se encuentra
@@ -53,6 +62,7 @@ public class RegisterInventoryService {
      * @param condition condición inicial del inventario
      * @return inventario registrado
      */
+    @Override
     public Inventory register(
             User performedBy,
             Product product,
@@ -61,6 +71,7 @@ public class RegisterInventoryService {
             InventoryCondition condition
     ) {
         validateRequiredData(product, warehouse);
+
         validateUserAccess(
                 performedBy,
                 product,
@@ -83,7 +94,9 @@ public class RegisterInventoryService {
         inventoryRepository.save(inventory);
 
         /*
-         * Si existen unidades iniciales, se registra su ingreso.
+         * Si existen unidades iniciales, se registra un
+         * movimiento de entrada como evidencia.
+         *
          * Un inventario iniciado en cero no genera movimiento.
          */
         if (initialQuantity > 0) {
@@ -103,6 +116,9 @@ public class RegisterInventoryService {
 
     /**
      * Valida que existan los repositorios requeridos.
+     *
+     * @param inventoryRepository repositorio de inventarios
+     * @param movementRepository repositorio de movimientos
      */
     private void validateRepositories(
             InventoryRepository inventoryRepository,
@@ -122,7 +138,11 @@ public class RegisterInventoryService {
     }
 
     /**
-     * Valida los objetos requeridos antes de comprobar permisos.
+     * Valida los objetos necesarios antes
+     * de comprobar los permisos.
+     *
+     * @param product producto que se desea almacenar
+     * @param warehouse bodega seleccionada
      */
     private void validateRequiredData(
             Product product,
@@ -144,6 +164,10 @@ public class RegisterInventoryService {
     /**
      * Comprueba que el usuario esté activo y tenga acceso
      * al producto y a la bodega seleccionada.
+     *
+     * @param user usuario que realiza la operación
+     * @param product producto administrado
+     * @param warehouse bodega administrada
      */
     private void validateUserAccess(
             User user,
@@ -183,7 +207,11 @@ public class RegisterInventoryService {
 
     /**
      * Comprueba que el vendedor administre tanto el producto
-     * como la bodega donde registra sus existencias.
+     * como la bodega donde registra las existencias.
+     *
+     * @param seller vendedor que realiza la operación
+     * @param product producto seleccionado
+     * @param warehouse bodega seleccionada
      */
     private void validateSellerAccess(
             Seller seller,
@@ -206,6 +234,8 @@ public class RegisterInventoryService {
     /**
      * Comprueba que el operador logístico utilice
      * una bodega perteneciente al Marketplace.
+     *
+     * @param warehouse bodega que se desea administrar
      */
     private void validateLogisticsAccess(
             Warehouse warehouse
@@ -220,6 +250,11 @@ public class RegisterInventoryService {
     /**
      * Comprueba que el inventario corresponda
      * a un producto físico.
+     *
+     * Los productos digitales no ocupan existencias
+     * ni requieren una bodega física.
+     *
+     * @param product producto que se desea almacenar
      */
     private void validatePhysicalProduct(Product product) {
         if (!product.isPhysical()) {

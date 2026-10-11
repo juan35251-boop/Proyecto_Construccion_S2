@@ -3,16 +3,22 @@ package application.services;
 import application.domain.models.Buyer;
 import application.domain.models.Cart;
 import application.domain.models.Product;
+import application.ports.input.CartManagementUseCase;
 import application.ports.output.CartRepository;
 
 /**
  * Servicio de aplicación encargado de gestionar
  * el carrito de compras de un comprador.
  *
+ * Implementa el puerto de entrada CartManagementUseCase,
+ * permitiendo que un futuro controlador gestione el carrito
+ * sin depender directamente de esta implementación.
+ *
  * Permite crear un carrito, agregar productos, cambiar
  * cantidades y eliminar productos.
  */
-public class CartManagementService {
+public class CartManagementService
+        implements CartManagementUseCase {
 
     private final CartRepository cartRepository;
 
@@ -34,6 +40,7 @@ public class CartManagementService {
      * @param buyer comprador propietario del carrito
      * @return carrito creado
      */
+    @Override
     public Cart createCart(Buyer buyer) {
         validateBuyerCanPurchase(buyer);
 
@@ -55,6 +62,7 @@ public class CartManagementService {
      * @param quantity cantidad que se desea agregar
      * @return carrito actualizado
      */
+    @Override
     public Cart addProduct(
             Buyer buyer,
             Cart cart,
@@ -63,7 +71,12 @@ public class CartManagementService {
     ) {
         validateCartOwner(buyer, cart);
 
+        /*
+         * Cart valida que el producto sea válido,
+         * esté publicado y que la cantidad sea mayor que cero.
+         */
         cart.addProduct(product, quantity);
+
         cartRepository.save(cart);
 
         return cart;
@@ -78,6 +91,7 @@ public class CartManagementService {
      * @param newQuantity nueva cantidad
      * @return carrito actualizado
      */
+    @Override
     public Cart changeProductQuantity(
             Buyer buyer,
             Cart cart,
@@ -86,7 +100,15 @@ public class CartManagementService {
     ) {
         validateCartOwner(buyer, cart);
 
-        cart.changeProductQuantity(product, newQuantity);
+        /*
+         * Cart valida que el producto exista dentro
+         * del carrito y que la nueva cantidad sea válida.
+         */
+        cart.changeProductQuantity(
+                product,
+                newQuantity
+        );
+
         cartRepository.save(cart);
 
         return cart;
@@ -100,6 +122,7 @@ public class CartManagementService {
      * @param product producto que se desea eliminar
      * @return carrito actualizado
      */
+    @Override
     public Cart removeProduct(
             Buyer buyer,
             Cart cart,
@@ -107,7 +130,12 @@ public class CartManagementService {
     ) {
         validateCartOwner(buyer, cart);
 
+        /*
+         * Cart comprueba que el producto exista
+         * antes de eliminarlo.
+         */
         cart.removeProduct(product);
+
         cartRepository.save(cart);
 
         return cart;
@@ -115,6 +143,8 @@ public class CartManagementService {
 
     /**
      * Valida que exista el repositorio de carritos.
+     *
+     * @param cartRepository repositorio de carritos
      */
     private void validateRepository(
             CartRepository cartRepository
@@ -128,6 +158,11 @@ public class CartManagementService {
 
     /**
      * Comprueba que el comprador pueda realizar compras.
+     *
+     * Para administrar un carrito, tanto su cuenta
+     * como su estado comercial deben permitir compras.
+     *
+     * @param buyer comprador que realiza la operación
      */
     private void validateBuyerCanPurchase(Buyer buyer) {
         if (buyer == null) {
@@ -146,6 +181,9 @@ public class CartManagementService {
     /**
      * Comprueba que el carrito exista y pertenezca
      * al comprador que realiza la operación.
+     *
+     * @param buyer comprador que realiza la operación
+     * @param cart carrito que se desea administrar
      */
     private void validateCartOwner(
             Buyer buyer,

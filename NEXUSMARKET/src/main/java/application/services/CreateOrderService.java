@@ -2,24 +2,34 @@ package application.services;
 
 import application.domain.models.Cart;
 import application.domain.models.Order;
+import application.ports.input.CreateOrderUseCase;
 import application.ports.output.OrderRepository;
 
 /**
  * Servicio de aplicación encargado de crear pedidos.
  *
+ * Implementa el puerto de entrada CreateOrderUseCase,
+ * permitiendo que un futuro controlador solicite la
+ * creación de una orden sin depender directamente
+ * de esta implementación.
+ *
  * Convierte el contenido de un carrito en un compromiso
  * comercial formal y solicita su almacenamiento.
  */
-public class CreateOrderService {
+public class CreateOrderService
+        implements CreateOrderUseCase {
 
     private final OrderRepository orderRepository;
 
     /**
      * Construye el servicio con el repositorio de pedidos.
      *
-     * @param orderRepository repositorio utilizado para guardar pedidos
+     * @param orderRepository repositorio utilizado
+     *                        para guardar pedidos
      */
-    public CreateOrderService(OrderRepository orderRepository) {
+    public CreateOrderService(
+            OrderRepository orderRepository
+    ) {
         validateRepository(orderRepository);
         this.orderRepository = orderRepository;
     }
@@ -40,15 +50,18 @@ public class CreateOrderService {
      * @param cart carrito que se desea confirmar
      * @return pedido creado y almacenado
      */
+    @Override
     public Order create(Cart cart) {
         /*
-         * Las reglas relacionadas con el carrito y el comprador
-         * son protegidas directamente por el modelo Order.
+         * Las reglas relacionadas con el carrito y
+         * el comprador son protegidas directamente
+         * por el modelo Order.
          */
         Order order = new Order(cart);
 
         /*
-         * El servicio solicita guardar el pedido mediante el puerto.
+         * El servicio solicita guardar el pedido
+         * mediante el puerto de salida.
          */
         orderRepository.save(order);
 

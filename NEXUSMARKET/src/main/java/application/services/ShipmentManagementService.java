@@ -3,17 +3,23 @@ package application.services;
 import application.domain.models.LogisticsOperator;
 import application.domain.models.Order;
 import application.domain.models.Shipment;
+import application.ports.input.ShipmentManagementUseCase;
 import application.ports.output.OrderRepository;
 import application.ports.output.ShipmentRepository;
 
 /**
  * Servicio de aplicación encargado de gestionar los envíos.
  *
+ * Implementa el puerto de entrada ShipmentManagementUseCase,
+ * permitiendo que un futuro controlador gestione los envíos
+ * sin depender directamente de esta implementación.
+ *
  * Permite crear, despachar y confirmar la entrega de un envío.
  * Estas operaciones solamente pueden ser realizadas por un
  * operador logístico activo.
  */
-public class ShipmentManagementService {
+public class ShipmentManagementService
+        implements ShipmentManagementUseCase {
 
     private final ShipmentRepository shipmentRepository;
     private final OrderRepository orderRepository;
@@ -21,8 +27,10 @@ public class ShipmentManagementService {
     /**
      * Construye el servicio con los repositorios necesarios.
      *
-     * @param shipmentRepository repositorio utilizado para guardar envíos
-     * @param orderRepository repositorio utilizado para actualizar pedidos
+     * @param shipmentRepository repositorio utilizado
+     *                           para guardar envíos
+     * @param orderRepository repositorio utilizado
+     *                        para actualizar pedidos
      */
     public ShipmentManagementService(
             ShipmentRepository shipmentRepository,
@@ -44,6 +52,7 @@ public class ShipmentManagementService {
      * @param order pedido que será enviado
      * @return envío creado
      */
+    @Override
     public Shipment createShipment(
             LogisticsOperator operator,
             Order order
@@ -51,8 +60,8 @@ public class ShipmentManagementService {
         validateOperator(operator);
 
         /*
-         * Shipment comprueba que el pedido exista, contenga
-         * productos físicos y se encuentre pagado.
+         * Shipment comprueba que el pedido exista,
+         * contenga productos físicos y se encuentre pagado.
          */
         Shipment shipment = new Shipment(order);
 
@@ -64,12 +73,13 @@ public class ShipmentManagementService {
     /**
      * Registra el despacho físico de un envío.
      *
-     * La operación cambia el pedido asociado de PAID
-     * a DISPATCHED.
+     * La operación cambia el pedido asociado
+     * de PAID a DISPATCHED.
      *
      * @param operator operador logístico responsable
      * @param shipment envío que será despachado
      */
+    @Override
     public void dispatchShipment(
             LogisticsOperator operator,
             Shipment shipment
@@ -77,6 +87,12 @@ public class ShipmentManagementService {
         validateOperator(operator);
         validateShipment(shipment);
 
+        /*
+         * Shipment controla que solamente un envío válido
+         * pueda pasar al estado de despachado.
+         *
+         * También actualiza la orden asociada.
+         */
         shipment.dispatch();
 
         saveShipmentAndOrder(shipment);
@@ -85,12 +101,13 @@ public class ShipmentManagementService {
     /**
      * Confirma que el envío fue entregado.
      *
-     * La operación cambia el pedido asociado de DISPATCHED
-     * a DELIVERED.
+     * La operación cambia el pedido asociado
+     * de DISPATCHED a DELIVERED.
      *
      * @param operator operador logístico responsable
      * @param shipment envío cuya entrega se confirma
      */
+    @Override
     public void confirmDelivery(
             LogisticsOperator operator,
             Shipment shipment
@@ -98,13 +115,20 @@ public class ShipmentManagementService {
         validateOperator(operator);
         validateShipment(shipment);
 
+        /*
+         * Shipment controla que el envío haya sido
+         * despachado antes de confirmar su entrega.
+         */
         shipment.confirmDelivery();
 
         saveShipmentAndOrder(shipment);
     }
 
     /**
-     * Guarda el envío y el nuevo estado de su pedido.
+     * Guarda el envío y el nuevo estado
+     * de su pedido asociado.
+     *
+     * @param shipment envío actualizado
      */
     private void saveShipmentAndOrder(
             Shipment shipment
@@ -117,6 +141,9 @@ public class ShipmentManagementService {
 
     /**
      * Valida que los repositorios requeridos existan.
+     *
+     * @param shipmentRepository repositorio de envíos
+     * @param orderRepository repositorio de pedidos
      */
     private void validateRepositories(
             ShipmentRepository shipmentRepository,
@@ -138,6 +165,8 @@ public class ShipmentManagementService {
     /**
      * Valida que la operación sea realizada por
      * un operador logístico activo.
+     *
+     * @param operator operador logístico responsable
      */
     private void validateOperator(
             LogisticsOperator operator
@@ -157,6 +186,8 @@ public class ShipmentManagementService {
 
     /**
      * Valida que exista un envío.
+     *
+     * @param shipment envío administrado
      */
     private void validateShipment(Shipment shipment) {
         if (shipment == null) {

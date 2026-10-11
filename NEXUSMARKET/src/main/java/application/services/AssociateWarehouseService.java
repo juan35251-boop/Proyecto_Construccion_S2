@@ -3,6 +3,7 @@ package application.services;
 import application.domain.models.Administrator;
 import application.domain.models.Seller;
 import application.domain.models.Warehouse;
+import application.ports.input.AssociateWarehouseUseCase;
 import application.ports.output.UserRepository;
 import application.ports.output.WarehouseRepository;
 
@@ -10,11 +11,16 @@ import application.ports.output.WarehouseRepository;
  * Servicio de aplicación encargado de asociar una bodega
  * previamente registrada con un vendedor.
  *
+ * Implementa el puerto de entrada AssociateWarehouseUseCase,
+ * permitiendo realizar la asociación sin depender
+ * directamente de esta implementación.
+ *
  * Solamente los administradores activos pueden realizar
  * esta operación. Además, el vendedor únicamente puede
  * recibir bodegas clasificadas como bodegas de vendedor.
  */
-public class AssociateWarehouseService {
+public class AssociateWarehouseService
+        implements AssociateWarehouseUseCase {
 
     private final UserRepository userRepository;
     private final WarehouseRepository warehouseRepository;
@@ -22,8 +28,10 @@ public class AssociateWarehouseService {
     /**
      * Construye el servicio con sus repositorios.
      *
-     * @param userRepository repositorio utilizado para guardar al vendedor
-     * @param warehouseRepository repositorio utilizado para comprobar la bodega
+     * @param userRepository repositorio utilizado
+     *                       para guardar al vendedor
+     * @param warehouseRepository repositorio utilizado
+     *                            para comprobar la bodega
      */
     public AssociateWarehouseService(
             UserRepository userRepository,
@@ -45,6 +53,7 @@ public class AssociateWarehouseService {
      * @param seller vendedor que administrará la bodega
      * @param warehouse bodega que será asociada
      */
+    @Override
     public void associate(
             Administrator associatedBy,
             Seller seller,
@@ -54,23 +63,31 @@ public class AssociateWarehouseService {
         validateSeller(seller);
         validateWarehouse(warehouse);
         validateRegisteredWarehouse(warehouse);
-        validateNotAlreadyAssociated(seller, warehouse);
+
+        validateNotAlreadyAssociated(
+                seller,
+                warehouse
+        );
 
         /*
-         * El modelo Seller comprueba que la bodega sea realmente
+         * Seller comprueba que la bodega sea realmente
          * una bodega perteneciente a la categoría SELLER.
          */
         seller.associateWarehouse(warehouse);
 
         /*
-         * La asociación forma parte de la información del vendedor,
-         * por eso se guarda nuevamente el vendedor actualizado.
+         * La asociación forma parte de la información
+         * del vendedor. Por eso se guarda nuevamente
+         * el vendedor actualizado.
          */
         userRepository.save(seller);
     }
 
     /**
      * Valida que los repositorios requeridos existan.
+     *
+     * @param userRepository repositorio de usuarios
+     * @param warehouseRepository repositorio de bodegas
      */
     private void validateRepositories(
             UserRepository userRepository,
@@ -92,6 +109,8 @@ public class AssociateWarehouseService {
     /**
      * Valida que la asociación sea realizada por
      * un administrador activo.
+     *
+     * @param administrator administrador responsable
      */
     private void validateAdministrator(
             Administrator administrator
@@ -112,8 +131,11 @@ public class AssociateWarehouseService {
     /**
      * Valida que el vendedor exista.
      *
-     * No exigimos que el vendedor esté activo porque el administrador
-     * puede preparar su información antes de habilitarlo comercialmente.
+     * No se exige que el vendedor esté activo porque
+     * el administrador puede preparar su información
+     * antes de habilitarlo comercialmente.
+     *
+     * @param seller vendedor que recibirá la bodega
      */
     private void validateSeller(Seller seller) {
         if (seller == null) {
@@ -125,6 +147,8 @@ public class AssociateWarehouseService {
 
     /**
      * Valida que la bodega exista.
+     *
+     * @param warehouse bodega que será asociada
      */
     private void validateWarehouse(Warehouse warehouse) {
         if (warehouse == null) {
@@ -135,7 +159,10 @@ public class AssociateWarehouseService {
     }
 
     /**
-     * Impide asociar una bodega que todavía no haya sido registrada.
+     * Impide asociar una bodega que todavía
+     * no haya sido registrada.
+     *
+     * @param warehouse bodega que será validada
      */
     private void validateRegisteredWarehouse(
             Warehouse warehouse
@@ -149,6 +176,9 @@ public class AssociateWarehouseService {
 
     /**
      * Impide registrar dos veces la misma relación.
+     *
+     * @param seller vendedor administrado
+     * @param warehouse bodega que será asociada
      */
     private void validateNotAlreadyAssociated(
             Seller seller,

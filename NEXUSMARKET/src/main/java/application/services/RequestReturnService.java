@@ -3,23 +3,32 @@ package application.services;
 import application.domain.models.Buyer;
 import application.domain.models.Order;
 import application.domain.models.Return;
+import application.ports.input.RequestReturnUseCase;
 import application.ports.output.ReturnRepository;
 
 /**
  * Servicio de aplicación encargado de registrar
  * las solicitudes de devolución.
  *
- * Un comprador activo solamente puede solicitar la devolución
- * de un pedido que le pertenece y que fue entregado o finalizado.
+ * Implementa el puerto de entrada RequestReturnUseCase,
+ * permitiendo solicitar una devolución sin depender
+ * directamente de esta implementación.
+ *
+ * Un comprador activo solamente puede solicitar
+ * la devolución de un pedido que le pertenece
+ * y que fue entregado o finalizado.
  */
-public class RequestReturnService {
+public class RequestReturnService
+        implements RequestReturnUseCase {
 
     private final ReturnRepository returnRepository;
 
     /**
-     * Construye el servicio con el repositorio de devoluciones.
+     * Construye el servicio con el repositorio
+     * de devoluciones.
      *
-     * @param returnRepository repositorio utilizado para guardar devoluciones
+     * @param returnRepository repositorio utilizado
+     *                         para guardar devoluciones
      */
     public RequestReturnService(
             ReturnRepository returnRepository
@@ -31,13 +40,15 @@ public class RequestReturnService {
     /**
      * Registra una solicitud de devolución.
      *
-     * El modelo Return valida que el pedido pertenezca al comprador
-     * y que tenga un estado válido para ser devuelto.
+     * El modelo Return valida que el pedido pertenezca
+     * al comprador y que tenga un estado válido
+     * para ser devuelto.
      *
      * @param buyer comprador que solicita la devolución
      * @param order pedido que se desea devolver
      * @return devolución registrada
      */
+    @Override
     public Return request(
             Buyer buyer,
             Order order
@@ -45,8 +56,20 @@ public class RequestReturnService {
         validateBuyer(buyer);
         validateActiveBuyer(buyer);
 
-        Return returnProcess = new Return(order, buyer);
+        /*
+         * Return comprueba que:
+         *
+         * - El pedido exista.
+         * - El pedido pertenezca al comprador.
+         * - El pedido haya sido entregado o finalizado.
+         */
+        Return returnProcess =
+                new Return(order, buyer);
 
+        /*
+         * Se almacena la solicitud mediante
+         * el puerto de salida.
+         */
         returnRepository.save(returnProcess);
 
         return returnProcess;
@@ -54,6 +77,8 @@ public class RequestReturnService {
 
     /**
      * Valida que el repositorio exista.
+     *
+     * @param returnRepository repositorio de devoluciones
      */
     private void validateRepository(
             ReturnRepository returnRepository
@@ -66,7 +91,10 @@ public class RequestReturnService {
     }
 
     /**
-     * Valida que la solicitud sea realizada por un comprador.
+     * Valida que la solicitud sea realizada
+     * por un comprador.
+     *
+     * @param buyer comprador que realiza la solicitud
      */
     private void validateBuyer(Buyer buyer) {
         if (buyer == null) {
@@ -79,9 +107,13 @@ public class RequestReturnService {
     /**
      * Verifica que la cuenta del comprador esté activa.
      *
-     * No utilizamos canPurchase(), porque un comprador suspendido
-     * comercialmente podría conservar el derecho de devolver una
-     * compra anterior. Solamente exigimos que su usuario esté activo.
+     * No utilizamos canPurchase(), porque un comprador
+     * suspendido comercialmente podría conservar el derecho
+     * de devolver una compra anterior.
+     *
+     * Solamente se exige que su usuario esté activo.
+     *
+     * @param buyer comprador que realiza la solicitud
      */
     private void validateActiveBuyer(Buyer buyer) {
         if (!buyer.isActive()) {

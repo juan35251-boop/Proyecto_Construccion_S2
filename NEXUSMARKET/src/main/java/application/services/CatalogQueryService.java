@@ -1,9 +1,10 @@
 package application.services;
 
+import application.domain.models.Product;
 import application.domain.models.Seller;
 import application.domain.models.User;
-import application.domain.models.Product;
 import application.domain.valueobjects.SystemRole;
+import application.ports.input.CatalogQueryUseCase;
 import application.ports.output.ProductQueryRepository;
 
 import java.util.List;
@@ -11,21 +12,29 @@ import java.util.List;
 /**
  * Servicio de aplicación encargado de consultar el catálogo.
  *
+ * Implementa el puerto de entrada CatalogQueryUseCase,
+ * permitiendo consultar productos sin depender directamente
+ * de esta implementación.
+ *
  * Aplica las siguientes reglas:
  *
  * - El comprador puede consultar productos publicados.
  * - El operador logístico puede consultar productos publicados.
- * - El vendedor puede consultar todos sus propios productos.
- * - El administrador y el supervisor pueden consultar todo el catálogo.
+ * - El vendedor puede consultar todos sus productos.
+ * - El administrador puede consultar todo el catálogo.
+ * - El supervisor puede consultar todo el catálogo.
  */
-public class CatalogQueryService {
+public class CatalogQueryService
+        implements CatalogQueryUseCase {
 
     private final ProductQueryRepository productQueryRepository;
 
     /**
-     * Construye el servicio con el puerto de consulta requerido.
+     * Construye el servicio con el puerto
+     * de consulta requerido.
      *
-     * @param productQueryRepository repositorio de consulta de productos
+     * @param productQueryRepository repositorio
+     *                               de consulta de productos
      */
     public CatalogQueryService(
             ProductQueryRepository productQueryRepository
@@ -36,15 +45,17 @@ public class CatalogQueryService {
             );
         }
 
-        this.productQueryRepository = productQueryRepository;
+        this.productQueryRepository =
+                productQueryRepository;
     }
 
     /**
      * Obtiene los productos visibles para el usuario.
      *
      * @param requestedBy usuario que realiza la consulta
-     * @return productos que el usuario tiene autorización para consultar
+     * @return productos que el usuario puede consultar
      */
+    @Override
     public List<Product> findAccessibleProducts(
             User requestedBy
     ) {
@@ -53,10 +64,18 @@ public class CatalogQueryService {
         List<Product> products =
                 productQueryRepository.findAll();
 
+        /*
+         * Administradores y supervisores pueden
+         * consultar todo el catálogo.
+         */
         if (hasGlobalAccess(requestedBy)) {
             return List.copyOf(products);
         }
 
+        /*
+         * El vendedor puede consultar todos sus productos,
+         * incluso si están suspendidos o descontinuados.
+         */
         if (requestedBy instanceof Seller seller) {
             return products.stream()
                     .filter(seller::managesProduct)
@@ -73,9 +92,14 @@ public class CatalogQueryService {
     }
 
     /**
-     * Valida que la consulta sea realizada por un usuario activo.
+     * Valida que la consulta sea realizada
+     * por un usuario activo.
+     *
+     * @param requestedBy usuario que realiza la consulta
      */
-    private void validateActiveRequester(User requestedBy) {
+    private void validateActiveRequester(
+            User requestedBy
+    ) {
         if (requestedBy == null) {
             throw new IllegalArgumentException(
                     "Requesting user must not be null."
@@ -90,11 +114,16 @@ public class CatalogQueryService {
     }
 
     /**
-     * El administrador y el supervisor tienen acceso global
+     * Indica si el usuario tiene acceso global
      * de lectura sobre el catálogo.
+     *
+     * @param user usuario que realiza la consulta
+     * @return true si es administrador o supervisor
      */
     private boolean hasGlobalAccess(User user) {
-        return user.getRole() == SystemRole.ADMINISTRATOR
-                || user.getRole() == SystemRole.SUPERVISOR;
+        return user.getRole()
+                == SystemRole.ADMINISTRATOR
+                || user.getRole()
+                == SystemRole.SUPERVISOR;
     }
 }

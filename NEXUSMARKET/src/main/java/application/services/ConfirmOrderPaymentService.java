@@ -2,23 +2,30 @@ package application.services;
 
 import application.domain.models.Buyer;
 import application.domain.models.Order;
+import application.ports.input.ConfirmOrderPaymentUseCase;
 import application.ports.output.OrderRepository;
 
 /**
  * Servicio de aplicación encargado de confirmar
  * el pago de un pedido.
  *
+ * Implementa el puerto de entrada ConfirmOrderPaymentUseCase,
+ * permitiendo confirmar el pago sin depender directamente
+ * de esta implementación.
+ *
  * No realiza un cobro bancario. Su responsabilidad es cambiar
  * el pedido de pendiente de pago a pagado y guardar el cambio.
  */
-public class ConfirmOrderPaymentService {
+public class ConfirmOrderPaymentService
+        implements ConfirmOrderPaymentUseCase {
 
     private final OrderRepository orderRepository;
 
     /**
      * Construye el servicio con el repositorio de pedidos.
      *
-     * @param orderRepository repositorio utilizado para guardar el pedido
+     * @param orderRepository repositorio utilizado
+     *                        para guardar el pedido
      */
     public ConfirmOrderPaymentService(
             OrderRepository orderRepository
@@ -28,12 +35,14 @@ public class ConfirmOrderPaymentService {
     }
 
     /**
-     * Confirma el pago de un pedido perteneciente al comprador.
+     * Confirma el pago de un pedido perteneciente
+     * al comprador.
      *
      * @param buyer comprador que confirma el pago
      * @param order pedido que fue pagado
      * @return pedido actualizado
      */
+    @Override
     public Order confirm(
             Buyer buyer,
             Order order
@@ -44,13 +53,15 @@ public class ConfirmOrderPaymentService {
         validateOrderOwner(buyer, order);
 
         /*
-         * Order controla internamente que solamente un pedido
-         * pendiente de pago pueda pasar al estado pagado.
+         * Order controla internamente que solamente
+         * un pedido pendiente de pago pueda pasar
+         * al estado PAID.
          */
         order.markAsPaid();
 
         /*
-         * Se solicita guardar el nuevo estado del pedido.
+         * Se solicita guardar el nuevo estado
+         * del pedido.
          */
         orderRepository.save(order);
 
@@ -59,6 +70,8 @@ public class ConfirmOrderPaymentService {
 
     /**
      * Valida que el repositorio exista.
+     *
+     * @param orderRepository repositorio de pedidos
      */
     private void validateRepository(
             OrderRepository orderRepository
@@ -71,7 +84,10 @@ public class ConfirmOrderPaymentService {
     }
 
     /**
-     * Valida que la operación sea realizada por un comprador.
+     * Valida que la operación sea realizada
+     * por un comprador.
+     *
+     * @param buyer comprador que confirma el pago
      */
     private void validateBuyer(Buyer buyer) {
         if (buyer == null) {
@@ -83,6 +99,8 @@ public class ConfirmOrderPaymentService {
 
     /**
      * Valida que exista un pedido.
+     *
+     * @param order pedido que se desea confirmar
      */
     private void validateOrder(Order order) {
         if (order == null) {
@@ -93,7 +111,10 @@ public class ConfirmOrderPaymentService {
     }
 
     /**
-     * Comprueba que el comprador esté autorizado para comprar.
+     * Comprueba que el comprador esté autorizado
+     * para comprar.
+     *
+     * @param buyer comprador que confirma el pago
      */
     private void validateBuyerCanPurchase(Buyer buyer) {
         if (!buyer.canPurchase()) {
@@ -104,7 +125,11 @@ public class ConfirmOrderPaymentService {
     }
 
     /**
-     * Comprueba que el comprador solamente pague su propio pedido.
+     * Comprueba que el comprador solamente pueda
+     * pagar sus propios pedidos.
+     *
+     * @param buyer comprador que confirma el pago
+     * @param order pedido que se desea confirmar
      */
     private void validateOrderOwner(
             Buyer buyer,
