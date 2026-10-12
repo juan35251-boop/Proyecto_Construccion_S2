@@ -8,27 +8,11 @@ import application.ports.output.UserRepository;
 
 import java.util.List;
 
-/**
- * Servicio encargado de consultar compradores.
- *
- * Implementa el puerto de entrada BuyerQueryUseCase,
- * permitiendo consultar compradores sin depender
- * directamente de esta implementación.
- *
- * Un comprador únicamente puede consultar su propia
- * información. Los administradores y supervisores
- * tienen acceso global de lectura.
- */
 public class BuyerQueryService
         implements BuyerQueryUseCase {
 
     private final UserRepository userRepository;
 
-    /**
-     * Construye el servicio con el repositorio de usuarios.
-     *
-     * @param userRepository repositorio de usuarios
-     */
     public BuyerQueryService(
             UserRepository userRepository
     ) {
@@ -41,13 +25,6 @@ public class BuyerQueryService
         this.userRepository = userRepository;
     }
 
-    /**
-     * Busca un comprador por su identificación.
-     *
-     * @param requestedBy usuario que realiza la consulta
-     * @param identification identificación buscada
-     * @return comprador encontrado
-     */
     @Override
     public Buyer findByIdentification(
             User requestedBy,
@@ -56,10 +33,6 @@ public class BuyerQueryService
         validateActiveRequester(requestedBy);
         validateIdentification(identification);
 
-        /*
-         * Primero se busca el usuario mediante
-         * su identificación.
-         */
         User foundUser = userRepository
                 .findByIdentification(identification)
                 .orElseThrow(
@@ -68,10 +41,6 @@ public class BuyerQueryService
                         )
                 );
 
-        /*
-         * Se comprueba que el usuario encontrado
-         * realmente sea un comprador.
-         */
         if (!(foundUser instanceof Buyer buyer)) {
             throw new IllegalStateException(
                     "The requested user is not a buyer."
@@ -80,13 +49,12 @@ public class BuyerQueryService
 
         boolean isSameBuyer =
                 requestedBy instanceof Buyer
-                        && requestedBy.getIdentification()
-                        .equals(buyer.getIdentification());
+                        && requestedBy
+                        .getIdentification()
+                        .equals(
+                                buyer.getIdentification()
+                        );
 
-        /*
-         * Un comprador únicamente puede consultar
-         * su propio perfil.
-         */
         if (!isSameBuyer
                 && !hasGlobalAccess(requestedBy)) {
             throw new IllegalStateException(
@@ -97,15 +65,10 @@ public class BuyerQueryService
         return buyer;
     }
 
-    /**
-     * Obtiene todos los compradores.
-     *
-     * @param requestedBy administrador o supervisor
-     *                    que realiza la consulta
-     * @return lista de compradores
-     */
     @Override
-    public List<Buyer> findAll(User requestedBy) {
+    public List<Buyer> findAll(
+            User requestedBy
+    ) {
         validateActiveRequester(requestedBy);
 
         if (!hasGlobalAccess(requestedBy)) {
@@ -114,23 +77,58 @@ public class BuyerQueryService
             );
         }
 
-        /*
-         * Se consultan todos los usuarios y se conservan
-         * solamente los que son compradores.
-         */
-        return userRepository.findAll()
+        return userRepository
+                .findAll()
                 .stream()
                 .filter(Buyer.class::isInstance)
                 .map(Buyer.class::cast)
                 .toList();
     }
 
-    /**
-     * Valida que el usuario solicitante exista
-     * y se encuentre activo.
-     *
-     * @param requestedBy usuario que realiza la consulta
-     */
+    @Override
+    public Buyer findByIdentification(
+            String requestedByIdentification,
+            String identification
+    ) {
+        User requestedBy = findRequester(
+                requestedByIdentification
+        );
+
+        return findByIdentification(
+                requestedBy,
+                identification
+        );
+    }
+
+    @Override
+    public List<Buyer> findAll(
+            String requestedByIdentification
+    ) {
+        User requestedBy = findRequester(
+                requestedByIdentification
+        );
+
+        return findAll(requestedBy);
+    }
+
+    private User findRequester(
+            String requestedByIdentification
+    ) {
+        validateIdentification(
+                requestedByIdentification
+        );
+
+        return userRepository
+                .findByIdentification(
+                        requestedByIdentification
+                )
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
+    }
+
     private void validateActiveRequester(
             User requestedBy
     ) {
@@ -147,11 +145,6 @@ public class BuyerQueryService
         }
     }
 
-    /**
-     * Valida que la identificación no esté vacía.
-     *
-     * @param identification identificación consultada
-     */
     private void validateIdentification(
             String identification
     ) {
@@ -163,13 +156,6 @@ public class BuyerQueryService
         }
     }
 
-    /**
-     * Indica si el usuario tiene acceso global
-     * a la información de compradores.
-     *
-     * @param user usuario que realiza la consulta
-     * @return true si es administrador o supervisor
-     */
     private boolean hasGlobalAccess(User user) {
         return user.getRole()
                 == SystemRole.ADMINISTRATOR
