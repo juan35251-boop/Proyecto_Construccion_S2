@@ -851,7 +851,7 @@ The following domain models are implemented in plain Java:
 
 The implementation has automated unit coverage for entity creation, required data, authorization, Inventory constraints, Cart behavior, Order transitions, billing eligibility, physical Shipment flow, Return eligibility, and Refund processing.
 
-At the current delivery checkpoint, Maven executes 102 tests with zero failures and zero errors. One generated Spring application-context test is temporarily skipped until database configuration is introduced.
+At the current delivery checkpoint, Maven executes 400 tests with zero failures and zero errors. One generated Spring application-context test is temporarily skipped until database configuration is introduced. The application layer also contains 35 services and 20 output ports, while input ports, REST adapters, and persistence adapters remain pending.
 
 ---
 

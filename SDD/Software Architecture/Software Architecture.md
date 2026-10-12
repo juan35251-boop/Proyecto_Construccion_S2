@@ -14,9 +14,9 @@ The functional specification is the primary source of business requirements. The
 
 This document defines the **target architecture** of NexusMarket.
 
-At the current stage, the project contains the Spring Boot entry point and the initial domain folders. The remaining packages, ports, adapters, services, controllers, and persistence components will be created progressively as the domain model and use cases are implemented.
+At the current stage, the project contains the Spring Boot entry point, the implemented domain model, application services, output ports, and their automated unit tests. Input ports, adapters, controllers, and persistence components will be created progressively in the next implementation stages.
 
-Therefore, the structures described here represent the intended design and must not be interpreted as fully implemented components.
+Therefore, this document distinguishes between implemented components and the remaining target structure. Components described as planned must not be interpreted as already implemented.
 
 ---
 
@@ -119,11 +119,11 @@ NEXUSMARKET/
     │   │       ├── domain/
     │   │       │   ├── models/
     │   │       │   ├── valueobjects/
-    │   │       │   ├── services/
-    │   │       │   ├── exceptions/
-    │   │       │   └── ports/
-    │   │       │       ├── in/
-    │   │       │       └── out/
+    │   │       │   └── exceptions/
+    │   │       ├── services/
+    │   │       ├── ports/
+    │   │       │   ├── input/
+    │   │       │   └── output/
     │   │       ├── adapters/
     │   │       │   ├── in/
     │   │       │   │   └── rest/
@@ -153,7 +153,7 @@ NEXUSMARKET/
             └── application/
 ```
 
-Package names are written in lowercase according to Java conventions. Existing folders `domain/models` and `domain/valueobjects` are valid starting points for this structure.
+Package names are written in lowercase according to Java conventions. The implemented core currently uses `application.domain.models`, `application.domain.valueobjects`, `application.services`, and `application.ports.output`. The `application.ports.input` package is the next planned addition.
 
 ---
 
@@ -171,7 +171,6 @@ The domain layer contains the business model and the rules that must remain vali
 - Implement domain behavior.
 - Define domain services when behavior does not naturally belong to one entity.
 - Define domain-specific exceptions.
-- Declare input and output ports.
 
 ### Restrictions
 
@@ -190,10 +189,15 @@ The domain layer must not:
 | --- | --- |
 | `domain.models` | Entities, aggregates, and business concepts with identity. |
 | `domain.valueobjects` | Immutable concepts defined by value and controlled domain types. |
-| `domain.services` | Business operations that do not belong naturally to a single entity. |
 | `domain.exceptions` | Errors expressed in business language. |
-| `domain.ports.in` | Use cases exposed by the application. |
-| `domain.ports.out` | Capabilities required from persistence or external systems. |
+
+Application orchestration and architectural contracts are located outside the domain model:
+
+| Package | Responsibility |
+| --- | --- |
+| `application.services` | Implemented use-case coordination and role-based application rules. |
+| `application.ports.input` | Planned use-case contracts exposed to input adapters. |
+| `application.ports.output` | Implemented persistence and query capabilities required by services. |
 
 ### Initial Domain Concepts
 
@@ -614,13 +618,15 @@ At the current delivery checkpoint, the repository contains:
 - Commercial and logistics models: `Product`, `Warehouse`, `Inventory`, `InventoryMovement`, `Cart`, `Order`, `Invoice`, `Shipment`, `Return`, and `Refund`, including their internal item models.
 - Implemented enums and immutable Value Objects for roles, statuses, classifications, movement types, Inventory condition, and Product variants.
 - Automated domain unit tests covering business validation, authorization, Inventory, Cart, Order lifecycle, billing, Shipment, Return, and Refund behavior.
-- 102 Maven-detected tests at the current checkpoint, with zero failures, zero errors, and one generated application-context test skipped until database configuration is introduced.
+- 400 Maven-detected tests at the current checkpoint, with zero failures, zero errors, and one generated application-context test skipped until database configuration is introduced.
+- 35 application services covering commands, queries, administrative reporting, and role-based access rules.
+- 20 output ports for persistence, queries, movements, and administrative reporting.
+- 35 application-service test classes in addition to the domain tests.
 - The Domain Model, Domain Value Objects, and Software Architecture documents.
 
 The following items are planned and not yet considered implemented:
 
-- Input and output ports.
-- Application use-case services.
+- Input ports.
 - REST controllers, request DTOs, response DTOs, and REST mappers.
 - MySQL persistence adapters.
 - MongoDB persistence adapters.
@@ -661,15 +667,15 @@ This architecture is designed to evolve incrementally.
 
 The recommended implementation order is:
 
-1. Validate the Domain Model and Domain Value Objects.
-2. Define aggregate boundaries and invariants.
-3. Define the first business use cases.
-4. Create input and output ports for those use cases.
-5. Implement domain behavior and use-case services.
+1. Validate the Domain Model and Domain Value Objects. **Completed.**
+2. Define the initial aggregate boundaries and invariants. **Completed for the current functional scope.**
+3. Define the business use cases. **Completed for the current functional scope.**
+4. Create output ports and application services. **Completed.**
+5. Create input ports for the implemented use cases. **Next stage.**
 6. Add REST input adapters.
 7. Add persistence output adapters.
 8. Configure security and infrastructure.
-9. Add unit and integration tests.
+9. Add integration, REST, and application-context tests.
 10. Review the architecture after each completed business capability.
 
 The system begins as a modular application. A migration toward independently deployed services should only be considered if concrete scalability, deployment, ownership, or operational requirements justify it.
