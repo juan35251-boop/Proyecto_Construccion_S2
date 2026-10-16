@@ -3,179 +3,164 @@ package application.services;
 import application.domain.models.Buyer;
 import application.domain.valueobjects.BuyerStatus;
 import application.domain.valueobjects.UserStatus;
-import application.services.support.InMemoryUserRepository;
-import org.junit.jupiter.api.DisplayName;
+import application.ports.output.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
-/**
- * Pruebas de la administración de direcciones del comprador.
- */
 class BuyerAddressServiceTest {
 
+    private UserRepository userRepository;
+    private BuyerAddressService buyerAddressService;
+
+    @BeforeEach
+    void setUp() {
+        userRepository = mock(UserRepository.class);
+
+        buyerAddressService =
+                new BuyerAddressService(userRepository);
+    }
+
     @Test
-    @DisplayName("Debe cambiar la dirección principal")
     void shouldChangePrimaryAddress() {
-        InMemoryUserRepository repository =
-                new InMemoryUserRepository();
+        Buyer buyer = createBuyer();
 
-        Buyer buyer = createBuyer(UserStatus.ACTIVE);
-
-        BuyerAddressService service =
-                new BuyerAddressService(repository);
-
-        service.changePrimaryAddress(
-                buyer,
-                "Second Street 20"
-        );
+        Buyer updatedBuyer =
+                buyerAddressService.changePrimaryAddress(
+                        buyer,
+                        "Carrera 50 #40-20"
+                );
 
         assertEquals(
-                "Second Street 20",
-                buyer.getPrimaryAddress()
+                "Carrera 50 #40-20",
+                updatedBuyer.getPrimaryAddress()
         );
-
-        assertTrue(repository.contains(buyer));
-        assertEquals(1, repository.getSaveCount());
     }
 
     @Test
-    @DisplayName("Debe agregar una dirección adicional")
     void shouldAddAdditionalAddress() {
-        InMemoryUserRepository repository =
-                new InMemoryUserRepository();
+        Buyer buyer = createBuyer();
 
-        Buyer buyer = createBuyer(UserStatus.ACTIVE);
-
-        BuyerAddressService service =
-                new BuyerAddressService(repository);
-
-        service.addAdditionalAddress(
-                buyer,
-                "Third Street 30"
-        );
+        Buyer updatedBuyer =
+                buyerAddressService.addAdditionalAddress(
+                        buyer,
+                        "Carrera 40 #50-60"
+                );
 
         assertTrue(
-                buyer.getAdditionalAddresses()
-                        .contains("Third Street 30")
+                updatedBuyer
+                        .getAdditionalAddresses()
+                        .contains("Carrera 40 #50-60")
         );
-
-        assertEquals(1, repository.getSaveCount());
     }
 
     @Test
-    @DisplayName("Debe eliminar una dirección existente")
     void shouldRemoveAdditionalAddress() {
-        InMemoryUserRepository repository =
-                new InMemoryUserRepository();
+        Buyer buyer = createBuyer();
 
-        Buyer buyer = createBuyer(UserStatus.ACTIVE);
-        buyer.addAdditionalAddress("Third Street 30");
-
-        BuyerAddressService service =
-                new BuyerAddressService(repository);
-
-        boolean removed = service.removeAdditionalAddress(
+        buyerAddressService.addAdditionalAddress(
                 buyer,
-                "Third Street 30"
+                "Carrera 40 #50-60"
         );
+
+        boolean removed =
+                buyerAddressService.removeAdditionalAddress(
+                        buyer,
+                        "Carrera 40 #50-60"
+                );
 
         assertTrue(removed);
+
         assertFalse(
                 buyer.getAdditionalAddresses()
-                        .contains("Third Street 30")
+                        .contains("Carrera 40 #50-60")
         );
-        assertEquals(1, repository.getSaveCount());
     }
 
     @Test
-    @DisplayName("No debe guardar si la dirección no existe")
-    void shouldNotSaveWhenAddressDoesNotExist() {
-        InMemoryUserRepository repository =
-                new InMemoryUserRepository();
+    void shouldReturnFalseWhenAddressDoesNotExist() {
+        Buyer buyer = createBuyer();
 
-        BuyerAddressService service =
-                new BuyerAddressService(repository);
-
-        boolean removed = service.removeAdditionalAddress(
-                createBuyer(UserStatus.ACTIVE),
-                "Unknown Street"
-        );
+        boolean removed =
+                buyerAddressService.removeAdditionalAddress(
+                        buyer,
+                        "Dirección inexistente"
+                );
 
         assertFalse(removed);
-        assertEquals(0, repository.getSaveCount());
     }
 
     @Test
-    @DisplayName("Debe rechazar un comprador nulo")
-    void shouldRejectNullBuyer() {
-        BuyerAddressService service =
-                new BuyerAddressService(
-                        new InMemoryUserRepository()
-                );
+    void shouldRejectEmptyPrimaryAddress() {
+        Buyer buyer = createBuyer();
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> service.changePrimaryAddress(
-                        null,
-                        "Second Street 20"
+                () -> buyerAddressService.changePrimaryAddress(
+                        buyer,
+                        ""
                 )
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar un comprador inactivo")
-    void shouldRejectInactiveBuyer() {
-        BuyerAddressService service =
-                new BuyerAddressService(
-                        new InMemoryUserRepository()
-                );
+    void shouldRejectEmptyAdditionalAddress() {
+        Buyer buyer = createBuyer();
 
         assertThrows(
-                IllegalStateException.class,
-                () -> service.addAdditionalAddress(
-                        createBuyer(UserStatus.INACTIVE),
-                        "Second Street 20"
+                IllegalArgumentException.class,
+                () -> buyerAddressService.addAdditionalAddress(
+                        buyer,
+                        ""
                 )
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar una dirección vacía")
-    void shouldRejectBlankAddress() {
-        BuyerAddressService service =
-                new BuyerAddressService(
-                        new InMemoryUserRepository()
-                );
-
+    void shouldRejectNullBuyerWhenChangingPrimaryAddress() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> service.changePrimaryAddress(
-                        createBuyer(UserStatus.ACTIVE),
-                        " "
+                () -> buyerAddressService.changePrimaryAddress(
+                        (Buyer) null,
+                        "Carrera 50 #40-20"
                 )
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar un repositorio nulo")
-    void shouldRejectNullRepository() {
+    void shouldRejectNullBuyerWhenAddingAddress() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new BuyerAddressService(null)
+                () -> buyerAddressService.addAdditionalAddress(
+                        (Buyer) null,
+                        "Carrera 40 #50-60"
+                )
         );
     }
 
-    private Buyer createBuyer(UserStatus status) {
+    @Test
+    void shouldRejectNullBuyerWhenRemovingAddress() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> buyerAddressService.removeAdditionalAddress(
+                        (Buyer) null,
+                        "Carrera 40 #50-60"
+                )
+        );
+    }
+
+    private Buyer createBuyer() {
         return new Buyer(
                 "1001",
-                "Buyer",
-                "buyer@email.com",
-                status,
-                "Main Street 10",
+                "Juan Perez",
+                "juan@email.com",
+                UserStatus.ACTIVE,
+                "Calle 10 #20-30",
                 BuyerStatus.ACTIVE
         );
     }

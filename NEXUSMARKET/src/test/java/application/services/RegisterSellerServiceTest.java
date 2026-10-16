@@ -9,6 +9,7 @@ import application.domain.valueobjects.UserStatus;
 import application.domain.valueobjects.WarehouseOwnerType;
 import application.ports.output.UserRepository;
 import org.junit.jupiter.api.Test;
+import application.domain.models.Administrator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,7 +82,7 @@ class RegisterSellerServiceTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.register(
-                        null,
+                         (Administrator) null,
                         "2001",
                         "Test Seller",
                         "seller@email.com",

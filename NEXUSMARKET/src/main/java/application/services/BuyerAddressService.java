@@ -1,31 +1,15 @@
 package application.services;
 
 import application.domain.models.Buyer;
+import application.domain.models.User;
 import application.ports.input.BuyerAddressUseCase;
 import application.ports.output.UserRepository;
 
-/**
- * Servicio encargado de administrar las direcciones
- * propias de un comprador.
- *
- * Implementa el puerto de entrada BuyerAddressUseCase,
- * permitiendo administrar las direcciones sin depender
- * directamente de esta implementación.
- *
- * Un comprador nunca puede modificar las direcciones
- * pertenecientes a otro comprador.
- */
 public class BuyerAddressService
         implements BuyerAddressUseCase {
 
     private final UserRepository userRepository;
 
-    /**
-     * Construye el servicio con el repositorio de usuarios.
-     *
-     * @param userRepository repositorio utilizado
-     *                       para guardar al comprador
-     */
     public BuyerAddressService(
             UserRepository userRepository
     ) {
@@ -38,13 +22,6 @@ public class BuyerAddressService
         this.userRepository = userRepository;
     }
 
-    /**
-     * Cambia la dirección principal del comprador.
-     *
-     * @param buyer comprador que modifica su dirección
-     * @param newPrimaryAddress nueva dirección principal
-     * @return comprador actualizado
-     */
     @Override
     public Buyer changePrimaryAddress(
             Buyer buyer,
@@ -52,24 +29,15 @@ public class BuyerAddressService
     ) {
         validateActiveBuyer(buyer);
 
-        /*
-         * Buyer valida que la nueva dirección
-         * no sea nula ni esté vacía.
-         */
-        buyer.changePrimaryAddress(newPrimaryAddress);
+        buyer.changePrimaryAddress(
+                newPrimaryAddress
+        );
 
         userRepository.save(buyer);
 
         return buyer;
     }
 
-    /**
-     * Agrega una dirección adicional.
-     *
-     * @param buyer comprador que agrega la dirección
-     * @param address dirección adicional
-     * @return comprador actualizado
-     */
     @Override
     public Buyer addAdditionalAddress(
             Buyer buyer,
@@ -77,10 +45,6 @@ public class BuyerAddressService
     ) {
         validateActiveBuyer(buyer);
 
-        /*
-         * Buyer protege las reglas relacionadas
-         * con sus direcciones adicionales.
-         */
         buyer.addAdditionalAddress(address);
 
         userRepository.save(buyer);
@@ -88,16 +52,6 @@ public class BuyerAddressService
         return buyer;
     }
 
-    /**
-     * Elimina una dirección adicional.
-     *
-     * El comprador se guarda únicamente si
-     * la dirección realmente existía.
-     *
-     * @param buyer comprador que elimina la dirección
-     * @param address dirección que se desea eliminar
-     * @return true si la dirección fue eliminada
-     */
     @Override
     public boolean removeAdditionalAddress(
             Buyer buyer,
@@ -108,10 +62,6 @@ public class BuyerAddressService
         boolean removed =
                 buyer.removeAdditionalAddress(address);
 
-        /*
-         * Si la dirección no existía, no ocurrió
-         * ningún cambio y no es necesario guardar.
-         */
         if (removed) {
             userRepository.save(buyer);
         }
@@ -119,12 +69,80 @@ public class BuyerAddressService
         return removed;
     }
 
-    /**
-     * Comprueba que la operación sea realizada
-     * por un comprador activo.
-     *
-     * @param buyer comprador que administra sus direcciones
-     */
+    @Override
+    public Buyer changePrimaryAddress(
+            String buyerIdentification,
+            String newPrimaryAddress
+    ) {
+        Buyer buyer = findBuyer(
+                buyerIdentification
+        );
+
+        return changePrimaryAddress(
+                buyer,
+                newPrimaryAddress
+        );
+    }
+
+    @Override
+    public Buyer addAdditionalAddress(
+            String buyerIdentification,
+            String address
+    ) {
+        Buyer buyer = findBuyer(
+                buyerIdentification
+        );
+
+        return addAdditionalAddress(
+                buyer,
+                address
+        );
+    }
+
+    @Override
+    public boolean removeAdditionalAddress(
+            String buyerIdentification,
+            String address
+    ) {
+        Buyer buyer = findBuyer(
+                buyerIdentification
+        );
+
+        return removeAdditionalAddress(
+                buyer,
+                address
+        );
+    }
+
+    private Buyer findBuyer(
+            String buyerIdentification
+    ) {
+        if (buyerIdentification == null
+                || buyerIdentification.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Buyer identification must not be empty."
+            );
+        }
+
+        User user = userRepository
+                .findByIdentification(
+                        buyerIdentification
+                )
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Buyer was not found."
+                        )
+                );
+
+        if (!(user instanceof Buyer buyer)) {
+            throw new IllegalStateException(
+                    "The requested user is not a buyer."
+            );
+        }
+
+        return buyer;
+    }
+
     private void validateActiveBuyer(Buyer buyer) {
         if (buyer == null) {
             throw new IllegalArgumentException(

@@ -8,7 +8,7 @@ import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.OrderQueryUseCase;
 import application.ports.output.OrderQueryRepository;
-
+import application.ports.input.OrderQueryUseCase;
 import java.util.List;
 
 /**

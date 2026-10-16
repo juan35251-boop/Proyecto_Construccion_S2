@@ -1,14 +1,18 @@
 package application.adapters.input.rest.controllers;
 
+import application.adapters.input.rest.dto.BuyerAddressRequest;
 import application.adapters.input.rest.dto.BuyerResponse;
 import application.adapters.input.rest.dto.RegisterBuyerRequest;
 import application.domain.models.Buyer;
+import application.ports.input.BuyerAddressUseCase;
 import application.ports.input.BuyerQueryUseCase;
 import application.ports.input.RegisterBuyerUseCase;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,10 +26,12 @@ public class BuyerController {
 
     private final RegisterBuyerUseCase registerBuyerUseCase;
     private final BuyerQueryUseCase buyerQueryUseCase;
+    private final BuyerAddressUseCase buyerAddressUseCase;
 
     public BuyerController(
             RegisterBuyerUseCase registerBuyerUseCase,
-            BuyerQueryUseCase buyerQueryUseCase
+            BuyerQueryUseCase buyerQueryUseCase,
+            BuyerAddressUseCase buyerAddressUseCase
     ) {
         if (registerBuyerUseCase == null) {
             throw new IllegalArgumentException(
@@ -39,13 +45,26 @@ public class BuyerController {
             );
         }
 
-        this.registerBuyerUseCase = registerBuyerUseCase;
-        this.buyerQueryUseCase = buyerQueryUseCase;
+        if (buyerAddressUseCase == null) {
+            throw new IllegalArgumentException(
+                    "Buyer address use case must not be null."
+            );
+        }
+
+        this.registerBuyerUseCase =
+                registerBuyerUseCase;
+
+        this.buyerQueryUseCase =
+                buyerQueryUseCase;
+
+        this.buyerAddressUseCase =
+                buyerAddressUseCase;
     }
 
     @PostMapping
     public ResponseEntity<BuyerResponse> register(
-            @Valid @RequestBody RegisterBuyerRequest request
+            @Valid @RequestBody
+            RegisterBuyerRequest request
     ) {
         Buyer buyer = registerBuyerUseCase.register(
                 request.identification(),
@@ -60,7 +79,8 @@ public class BuyerController {
     }
 
     @GetMapping("/{identification}")
-    public ResponseEntity<BuyerResponse> findByIdentification(
+    public ResponseEntity<BuyerResponse>
+    findByIdentification(
             @RequestHeader(
                     "X-Requester-Identification"
             )
@@ -76,5 +96,70 @@ public class BuyerController {
         return ResponseEntity.ok(
                 BuyerResponse.from(buyer)
         );
+    }
+
+    @PatchMapping("/me/primary-address")
+    public ResponseEntity<BuyerResponse>
+    changePrimaryAddress(
+            @RequestHeader(
+                    "X-Requester-Identification"
+            )
+            String buyerIdentification,
+            @Valid @RequestBody
+            BuyerAddressRequest request
+    ) {
+        Buyer buyer =
+                buyerAddressUseCase.changePrimaryAddress(
+                        buyerIdentification,
+                        request.address()
+                );
+
+        return ResponseEntity.ok(
+                BuyerResponse.from(buyer)
+        );
+    }
+
+    @PostMapping("/me/addresses")
+    public ResponseEntity<BuyerResponse>
+    addAdditionalAddress(
+            @RequestHeader(
+                    "X-Requester-Identification"
+            )
+            String buyerIdentification,
+            @Valid @RequestBody
+            BuyerAddressRequest request
+    ) {
+        Buyer buyer =
+                buyerAddressUseCase.addAdditionalAddress(
+                        buyerIdentification,
+                        request.address()
+                );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(BuyerResponse.from(buyer));
+    }
+
+    @DeleteMapping("/me/addresses")
+    public ResponseEntity<Void>
+    removeAdditionalAddress(
+            @RequestHeader(
+                    "X-Requester-Identification"
+            )
+            String buyerIdentification,
+            @Valid @RequestBody
+            BuyerAddressRequest request
+    ) {
+        boolean removed =
+                buyerAddressUseCase.removeAdditionalAddress(
+                        buyerIdentification,
+                        request.address()
+                );
+
+        if (!removed) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.noContent().build();
     }
 }

@@ -4,6 +4,7 @@ import application.adapters.input.rest.exception.GlobalExceptionHandler;
 import application.domain.models.Buyer;
 import application.domain.valueobjects.BuyerStatus;
 import application.domain.valueobjects.UserStatus;
+import application.ports.input.BuyerAddressUseCase;
 import application.ports.input.BuyerQueryUseCase;
 import application.ports.input.RegisterBuyerUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +15,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,6 +27,7 @@ class BuyerControllerTest {
 
     private RegisterBuyerUseCase registerBuyerUseCase;
     private BuyerQueryUseCase buyerQueryUseCase;
+    private BuyerAddressUseCase buyerAddressUseCase;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -34,10 +38,14 @@ class BuyerControllerTest {
         buyerQueryUseCase =
                 mock(BuyerQueryUseCase.class);
 
+        buyerAddressUseCase =
+                mock(BuyerAddressUseCase.class);
+
         BuyerController buyerController =
                 new BuyerController(
                         registerBuyerUseCase,
-                        buyerQueryUseCase
+                        buyerQueryUseCase,
+                        buyerAddressUseCase
                 );
 
         mockMvc = standaloneSetup(buyerController)
@@ -67,11 +75,13 @@ class BuyerControllerTest {
                 }
                 """;
 
-        mockMvc.perform(post("/api/v1/buyers")
-                        .contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                        .content(requestBody))
+        mockMvc.perform(
+                        post("/api/v1/buyers")
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.identification")
                         .value("1001"))
@@ -152,11 +162,13 @@ class BuyerControllerTest {
                 }
                 """;
 
-        mockMvc.perform(post("/api/v1/buyers")
-                        .contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                        .content(requestBody))
+        mockMvc.perform(
+                        post("/api/v1/buyers")
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status")
                         .value(400))
@@ -206,11 +218,13 @@ class BuyerControllerTest {
                 }
                 """;
 
-        mockMvc.perform(post("/api/v1/buyers")
-                        .contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                        .content(requestBody))
+        mockMvc.perform(
+                        post("/api/v1/buyers")
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status")
                         .value(409))
@@ -222,6 +236,134 @@ class BuyerControllerTest {
                         ))
                 .andExpect(jsonPath("$.path")
                         .value("/api/v1/buyers"));
+    }
+
+    @Test
+    void shouldChangePrimaryAddress()
+            throws Exception {
+
+        Buyer buyer = createBuyer();
+
+        buyer.changePrimaryAddress(
+                "Carrera 50 #40-20"
+        );
+
+        when(buyerAddressUseCase.changePrimaryAddress(
+                "1001",
+                "Carrera 50 #40-20"
+        )).thenReturn(buyer);
+
+        String requestBody = """
+                {
+                    "address": "Carrera 50 #40-20"
+                }
+                """;
+
+        mockMvc.perform(
+                        patch(
+                                "/api/v1/buyers/me/primary-address"
+                        )
+                                .header(
+                                        "X-Requester-Identification",
+                                        "1001"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identification")
+                        .value("1001"))
+                .andExpect(jsonPath("$.primaryAddress")
+                        .value("Carrera 50 #40-20"));
+
+        verify(buyerAddressUseCase)
+                .changePrimaryAddress(
+                        "1001",
+                        "Carrera 50 #40-20"
+                );
+    }
+
+    @Test
+    void shouldAddAdditionalAddress()
+            throws Exception {
+
+        Buyer buyer = createBuyer();
+
+        buyer.addAdditionalAddress(
+                "Carrera 40 #50-60"
+        );
+
+        when(buyerAddressUseCase.addAdditionalAddress(
+                "1001",
+                "Carrera 40 #50-60"
+        )).thenReturn(buyer);
+
+        String requestBody = """
+                {
+                    "address": "Carrera 40 #50-60"
+                }
+                """;
+
+        mockMvc.perform(
+                        post("/api/v1/buyers/me/addresses")
+                                .header(
+                                        "X-Requester-Identification",
+                                        "1001"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.identification")
+                        .value("1001"))
+                .andExpect(jsonPath(
+                        "$.additionalAddresses[0]"
+                ).value("Carrera 40 #50-60"));
+
+        verify(buyerAddressUseCase)
+                .addAdditionalAddress(
+                        "1001",
+                        "Carrera 40 #50-60"
+                );
+    }
+
+    @Test
+    void shouldRemoveAdditionalAddress()
+            throws Exception {
+
+        when(buyerAddressUseCase.removeAdditionalAddress(
+                "1001",
+                "Carrera 40 #50-60"
+        )).thenReturn(true);
+
+        String requestBody = """
+                {
+                    "address": "Carrera 40 #50-60"
+                }
+                """;
+
+        mockMvc.perform(
+                        delete("/api/v1/buyers/me/addresses")
+                                .header(
+                                        "X-Requester-Identification",
+                                        "1001"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(requestBody)
+                )
+                .andExpect(status().isNoContent());
+
+        verify(buyerAddressUseCase)
+                .removeAdditionalAddress(
+                        "1001",
+                        "Carrera 40 #50-60"
+                );
     }
 
     private Buyer createBuyer() {
