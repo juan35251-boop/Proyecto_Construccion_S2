@@ -16,7 +16,8 @@ import java.util.List;
 public interface SellerQueryUseCase {
 
     /**
-     * Busca un vendedor mediante su identificación.
+     * Busca un vendedor utilizando directamente
+     * al usuario que realiza la consulta.
      *
      * @param requestedBy usuario que realiza la consulta
      * @param identification identificación del vendedor
@@ -28,11 +29,43 @@ public interface SellerQueryUseCase {
     );
 
     /**
-     * Obtiene todos los vendedores registrados.
+     * Obtiene todos los vendedores utilizando directamente
+     * al usuario que realiza la consulta.
      *
      * @param requestedBy administrador o supervisor
      *                    que realiza la consulta
      * @return lista de vendedores
      */
     List<Seller> findAll(User requestedBy);
+
+    /**
+     * Busca un vendedor utilizando la identificación
+     * del usuario que realiza la consulta.
+     *
+     * Esta operación permite que los adaptadores REST
+     * trabajen con la identificación recibida mediante
+     * una cabecera HTTP.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @param sellerIdentification identificación del vendedor consultado
+     * @return vendedor encontrado
+     */
+    Seller findByIdentification(
+            String requesterIdentification,
+            String sellerIdentification
+    );
+
+    /**
+     * Obtiene todos los vendedores utilizando la identificación
+     * del usuario que realiza la consulta.
+     *
+     * Solamente un administrador o supervisor activo
+     * puede realizar esta operación.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @return lista de vendedores
+     */
+    List<Seller> findAll(
+            String requesterIdentification
+    );
 }

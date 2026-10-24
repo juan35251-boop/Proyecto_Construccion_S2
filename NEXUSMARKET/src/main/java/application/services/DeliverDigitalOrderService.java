@@ -5,28 +5,16 @@ import application.ports.input.DeliverDigitalOrderUseCase;
 import application.ports.output.OrderRepository;
 
 /**
- * Servicio de aplicación encargado de confirmar
- * la entrega de pedidos exclusivamente digitales.
+ * Servicio encargado de confirmar la entrega
+ * de pedidos exclusivamente digitales.
  *
- * Implementa el puerto de entrada DeliverDigitalOrderUseCase,
- * permitiendo ejecutar la entrega digital sin depender
- * directamente de esta implementación.
+ * Un pedido digital no necesita dirección, bodega
+ * ni despacho físico. Después de confirmar su pago,
+ * puede pasar directamente de PAID a DELIVERED.
  *
- * Un pedido digital no necesita una dirección física,
- * una bodega ni un proceso de despacho. Después de que
- * su pago ha sido confirmado, puede pasar directamente
- * del estado PAID al estado DELIVERED.
- *
- * Este servicio representa la entrega desde el punto de
- * vista del negocio. Actualmente no envía físicamente un
- * archivo, una licencia ni un enlace por correo electrónico.
- *
- * Esa entrega técnica podrá implementarse posteriormente
- * mediante un puerto y un adaptador especializado.
- *
- * Los pedidos que contengan al menos un producto físico
- * deben utilizar el proceso de envíos, incluso si también
- * incluyen productos digitales.
+ * Este servicio representa la entrega desde el punto
+ * de vista del negocio. Todavía no envía archivos,
+ * licencias o enlaces por correo electrónico.
  */
 public class DeliverDigitalOrderService
         implements DeliverDigitalOrderUseCase {
@@ -34,12 +22,9 @@ public class DeliverDigitalOrderService
     private final OrderRepository orderRepository;
 
     /**
-     * Construye el servicio con el repositorio utilizado
-     * para guardar el pedido después de su entrega.
+     * Construye el servicio.
      *
      * @param orderRepository repositorio de pedidos
-     *
-     * @throws IllegalArgumentException si el repositorio es nulo
      */
     public DeliverDigitalOrderService(
             OrderRepository orderRepository
@@ -49,33 +34,19 @@ public class DeliverDigitalOrderService
     }
 
     /**
-     * Confirma la entrega de un pedido
-     * exclusivamente digital.
+     * Confirma la entrega de un pedido digital.
      *
-     * Para completar la operación deben cumplirse
-     * estas reglas:
+     * El pedido:
      *
-     * 1. El pedido debe existir.
-     * 2. No debe contener productos físicos.
-     * 3. Su pago debe haber sido confirmado.
+     * - Debe existir.
+     * - No puede contener productos físicos.
+     * - Debe encontrarse pagado.
      *
-     * La comprobación del pago se realiza dentro del modelo
-     * Order mediante markAsDelivered().
+     * No se valida una dirección de entrega porque
+     * los productos digitales no requieren transporte.
      *
-     * Para un pedido digital, ese método solamente
-     * permite la transición:
-     *
-     * PAID -> DELIVERED
-     *
-     * No se valida la dirección del comprador porque no
-     * existe un envío físico.
-     *
-     * @param order pedido digital que se desea entregar
-     * @return pedido actualizado en estado DELIVERED
-     *
-     * @throws IllegalArgumentException si el pedido es nulo
-     * @throws IllegalStateException si contiene productos físicos
-     * @throws IllegalStateException si el pedido no está pagado
+     * @param order pedido digital
+     * @return pedido actualizado
      */
     @Override
     public Order deliver(Order order) {
@@ -83,30 +54,42 @@ public class DeliverDigitalOrderService
         validateDigitalOnlyOrder(order);
 
         /*
-         * Order protege su propio ciclo de vida.
-         *
-         * Si el pedido digital no está en estado PAID,
-         * markAsDelivered() genera una excepción y evita
-         * registrar una entrega sin pago.
+         * Order comprueba que el estado actual sea PAID
+         * antes de cambiarlo a DELIVERED.
          */
         order.markAsDelivered();
 
-        /*
-         * Se guarda el nuevo estado del pedido.
-         *
-         * Esta operación registra la entrega comercial,
-         * pero todavía no realiza el envío técnico de un
-         * archivo, enlace o licencia.
-         */
         orderRepository.save(order);
 
         return order;
     }
 
     /**
-     * Valida que el repositorio requerido exista.
+     * Localiza y entrega un pedido mediante su identificador.
      *
-     * @param orderRepository repositorio que será validado
+     * @param orderId identificador del pedido
+     * @return pedido actualizado
+     */
+    @Override
+    public Order deliverByOrderId(String orderId) {
+        validateText(
+                orderId,
+                "Order identifier"
+        );
+
+        Order order = orderRepository
+                .findById(orderId)
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Order was not found."
+                        )
+                );
+
+        return deliver(order);
+    }
+
+    /**
+     * Valida que exista el repositorio.
      */
     private void validateRepository(
             OrderRepository orderRepository
@@ -119,9 +102,7 @@ public class DeliverDigitalOrderService
     }
 
     /**
-     * Valida que exista un pedido para entregar.
-     *
-     * @param order pedido que será validado
+     * Valida que exista el pedido.
      */
     private void validateOrder(Order order) {
         if (order == null) {
@@ -132,19 +113,27 @@ public class DeliverDigitalOrderService
     }
 
     /**
-     * Comprueba que el pedido sea exclusivamente digital.
-     *
-     * No basta con que tenga algún producto digital.
-     * Si el pedido contiene al menos un producto físico,
-     * se considera mixto y debe pasar por el proceso de
-     * preparación y despacho.
-     *
-     * @param order pedido que será validado
+     * Impide usar la entrega digital con pedidos físicos
+     * o mixtos.
      */
     private void validateDigitalOnlyOrder(Order order) {
         if (order.containsPhysicalProducts()) {
             throw new IllegalStateException(
                     "Orders with physical products require shipment."
+            );
+        }
+    }
+
+    /**
+     * Valida un identificador obligatorio.
+     */
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
             );
         }
     }

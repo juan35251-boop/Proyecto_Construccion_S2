@@ -6,19 +6,13 @@ import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.ReturnQueryUseCase;
 import application.ports.output.ReturnQueryRepository;
+import application.ports.output.UserRepository;
 
 import java.util.List;
 
 /**
- * Servicio encargado de consultar devoluciones.
- *
- * Implementa el puerto de entrada ReturnQueryUseCase,
- * permitiendo consultar devoluciones sin depender
- * directamente de esta implementación.
- *
- * El comprador solamente consulta sus devoluciones.
- * Los administradores y supervisores pueden consultarlas
- * globalmente para gestión y monitoreo.
+ * Servicio encargado de consultar solicitudes
+ * de devolución.
  */
 public class ReturnQueryService
         implements ReturnQueryUseCase {
@@ -26,30 +20,54 @@ public class ReturnQueryService
     private final ReturnQueryRepository
             returnQueryRepository;
 
+    private final UserRepository userRepository;
+
     /**
-     * Construye el servicio con el repositorio requerido.
+     * Constructor conservado para las pruebas
+     * que proporcionan directamente un usuario.
      *
-     * @param returnQueryRepository repositorio
-     *                              de devoluciones
+     * @param returnQueryRepository repositorio de devoluciones
      */
     public ReturnQueryService(
             ReturnQueryRepository returnQueryRepository
     ) {
-        if (returnQueryRepository == null) {
-            throw new IllegalArgumentException(
-                    "Return query repository must not be null."
-            );
-        }
+        validateReturnQueryRepository(
+                returnQueryRepository
+        );
 
         this.returnQueryRepository =
                 returnQueryRepository;
+        this.userRepository = null;
     }
 
     /**
-     * Obtiene las devoluciones visibles para el usuario.
+     * Construye el servicio completo utilizado por la API.
      *
-     * @param requestedBy usuario que realiza la consulta
-     * @return devoluciones autorizadas
+     * @param returnQueryRepository repositorio de devoluciones
+     * @param userRepository repositorio de usuarios
+     */
+    public ReturnQueryService(
+            ReturnQueryRepository returnQueryRepository,
+            UserRepository userRepository
+    ) {
+        validateReturnQueryRepository(
+                returnQueryRepository
+        );
+
+        validateUserRepository(userRepository);
+
+        this.returnQueryRepository =
+                returnQueryRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Obtiene las devoluciones visibles
+     * para el usuario recibido.
+     *
+     * Los administradores y supervisores pueden consultar
+     * todas las devoluciones. Los compradores solamente
+     * pueden consultar las propias.
      */
     @Override
     public List<Return> findAccessibleReturns(
@@ -60,69 +78,165 @@ public class ReturnQueryService
         List<Return> returns =
                 returnQueryRepository.findAll();
 
-        /*
-         * Administradores y supervisores tienen
-         * acceso global de lectura.
-         */
         if (hasGlobalAccess(requestedBy)) {
             return List.copyOf(returns);
         }
 
-        /*
-         * El comprador solamente puede consultar
-         * las devoluciones que le pertenecen.
-         */
         if (requestedBy instanceof Buyer buyer) {
             return returns.stream()
-                    .filter(
-                            returnProcess ->
-                                    returnProcess.getBuyer()
-                                            == buyer
+                    .filter(returnProcess ->
+                            returnProcess
+                                    .wasRequestedBy(buyer)
                     )
                     .toList();
         }
 
-        /*
-         * Los vendedores, operadores logísticos
-         * y demás roles no tienen acceso.
-         */
         throw new IllegalStateException(
                 "User is not authorized to query returns."
         );
     }
 
     /**
-     * Valida que quien consulta sea un usuario activo.
-     *
-     * @param requestedBy usuario solicitante
+     * Consulta devoluciones usando la identificación
+     * del usuario solicitante.
      */
-    private void validateActiveRequester(
-            User requestedBy
+    @Override
+    public List<Return>
+    findAccessibleReturnsByRequesterIdentification(
+            String requesterIdentification
     ) {
-        if (requestedBy == null) {
+        User requester =
+                findRequester(
+                        requesterIdentification
+                );
+
+        return findAccessibleReturns(requester);
+    }
+
+    /**
+     * Consulta una devolución específica.
+     */
+    @Override
+    public Return findAccessibleReturnByIdentifiers(
+            String requesterIdentification,
+            String returnId
+    ) {
+        validateText(
+                returnId,
+                "Return identifier"
+        );
+
+        User requester =
+                findRequester(
+                        requesterIdentification
+                );
+
+        Return returnProcess =
+                returnQueryRepository
+                        .findById(returnId)
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Return was not found."
+                                )
+                        );
+
+        validateActiveRequester(requester);
+
+        if (hasGlobalAccess(requester)) {
+            return returnProcess;
+        }
+
+        if (requester instanceof Buyer buyer
+                && returnProcess.wasRequestedBy(buyer)) {
+            return returnProcess;
+        }
+
+        throw new IllegalStateException(
+                "User is not authorized to query this return."
+        );
+    }
+
+    private User findRequester(
+            String identification
+    ) {
+        validateText(
+                identification,
+                "Requester identification"
+        );
+
+        validateUserRepositoryAvailable();
+
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
+    }
+
+    private boolean hasGlobalAccess(
+            User user
+    ) {
+        return user.getRole()
+                == SystemRole.ADMINISTRATOR
+                || user.getRole()
+                == SystemRole.SUPERVISOR;
+    }
+
+    private void validateActiveRequester(
+            User requester
+    ) {
+        if (requester == null) {
             throw new IllegalArgumentException(
                     "Requesting user must not be null."
             );
         }
 
-        if (!requestedBy.isActive()) {
+        if (!requester.isActive()) {
             throw new IllegalStateException(
                     "Only active users can query returns."
             );
         }
     }
 
-    /**
-     * Indica si el usuario posee acceso global
-     * de lectura sobre las devoluciones.
-     *
-     * @param user usuario que realiza la consulta
-     * @return true si es administrador o supervisor
-     */
-    private boolean hasGlobalAccess(User user) {
-        return user.getRole()
-                == SystemRole.ADMINISTRATOR
-                || user.getRole()
-                == SystemRole.SUPERVISOR;
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null
+                || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
+            );
+        }
+    }
+
+    private void validateUserRepositoryAvailable() {
+        if (userRepository == null) {
+            throw new IllegalStateException(
+                    "User repository is required for identifier-based operations."
+            );
+        }
+    }
+
+    private void validateReturnQueryRepository(
+            ReturnQueryRepository repository
+    ) {
+        if (repository == null) {
+            throw new IllegalArgumentException(
+                    "Return query repository must not be null."
+            );
+        }
+    }
+
+    private void validateUserRepository(
+            UserRepository repository
+    ) {
+        if (repository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
     }
 }

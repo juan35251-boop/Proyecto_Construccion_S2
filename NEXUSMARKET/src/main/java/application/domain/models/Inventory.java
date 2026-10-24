@@ -2,6 +2,9 @@ package application.domain.models;
 
 import application.domain.valueobjects.InventoryCondition;
 
+import java.util.Objects;
+import java.util.UUID;
+
 /**
  * Representa las existencias de un producto dentro de una bodega.
  *
@@ -10,8 +13,17 @@ import application.domain.valueobjects.InventoryCondition;
  *
  * El producto y la bodega no pueden reemplazarse después de crear el
  * inventario, pero la cantidad disponible y la condición sí pueden cambiar.
+ *
+ * Cada inventario posee un identificador permanente que permite
+ * almacenarlo en MySQL y relacionarlo con su historial de movimientos
+ * guardado en MongoDB.
  */
 public class Inventory {
+
+    /**
+     * Identificador único y permanente del inventario.
+     */
+    private final String inventoryId;
 
     /**
      * Producto cuyas existencias se administran.
@@ -36,20 +48,16 @@ public class Inventory {
     private InventoryCondition condition;
 
     /**
-     * Crea un inventario asociado a un producto y una bodega.
+     * Crea un inventario nuevo y genera automáticamente
+     * su identificador permanente.
      *
-     * Todos los datos son validados antes de inicializar el inventario.
-     * La cantidad inicial puede ser cero, pero no puede ser negativa.
+     * Este constructor se conserva para mantener compatibilidad
+     * con los servicios y las pruebas existentes.
      *
      * @param product producto asociado al inventario
      * @param warehouse bodega donde se almacena el producto
      * @param availableQuantity cantidad disponible inicialmente
      * @param condition condición inicial del inventario
-     *
-     * @throws IllegalArgumentException si el producto es nulo
-     * @throws IllegalArgumentException si la bodega es nula
-     * @throws IllegalArgumentException si la cantidad inicial es negativa
-     * @throws IllegalArgumentException si la condición es nula
      */
     public Inventory(
             Product product,
@@ -57,11 +65,41 @@ public class Inventory {
             int availableQuantity,
             InventoryCondition condition
     ) {
+        this(
+                UUID.randomUUID().toString(),
+                product,
+                warehouse,
+                availableQuantity,
+                condition
+        );
+    }
+
+    /**
+     * Reconstruye un inventario utilizando un identificador existente.
+     *
+     * Este constructor será utilizado por el adaptador JPA cuando
+     * recupere un inventario almacenado en MySQL.
+     *
+     * @param inventoryId identificador permanente del inventario
+     * @param product producto asociado al inventario
+     * @param warehouse bodega donde se almacena el producto
+     * @param availableQuantity cantidad disponible
+     * @param condition condición del inventario
+     */
+    public Inventory(
+            String inventoryId,
+            Product product,
+            Warehouse warehouse,
+            int availableQuantity,
+            InventoryCondition condition
+    ) {
+        validateInventoryId(inventoryId);
         validateProduct(product);
         validateWarehouse(warehouse);
         validateNonNegativeQuantity(availableQuantity);
         validateCondition(condition);
 
+        this.inventoryId = inventoryId;
         this.product = product;
         this.warehouse = warehouse;
         this.availableQuantity = availableQuantity;
@@ -69,9 +107,18 @@ public class Inventory {
     }
 
     /**
+     * Obtiene el identificador permanente del inventario.
+     *
+     * @return identificador del inventario
+     */
+    public String getInventoryId() {
+        return inventoryId;
+    }
+
+    /**
      * Obtiene el producto asociado al inventario.
      *
-     * @return el producto almacenado
+     * @return producto almacenado
      */
     public Product getProduct() {
         return product;
@@ -80,7 +127,7 @@ public class Inventory {
     /**
      * Obtiene la bodega asociada al inventario.
      *
-     * @return la bodega donde se encuentra el producto
+     * @return bodega donde se encuentra el producto
      */
     public Warehouse getWarehouse() {
         return warehouse;
@@ -89,7 +136,7 @@ public class Inventory {
     /**
      * Obtiene la cantidad actualmente disponible.
      *
-     * @return la cantidad disponible del producto
+     * @return cantidad disponible del producto
      */
     public int getAvailableQuantity() {
         return availableQuantity;
@@ -98,7 +145,7 @@ public class Inventory {
     /**
      * Obtiene la condición actual del inventario.
      *
-     * @return la condición del inventario
+     * @return condición del inventario
      */
     public InventoryCondition getCondition() {
         return condition;
@@ -107,12 +154,7 @@ public class Inventory {
     /**
      * Aumenta la cantidad disponible del producto.
      *
-     * La cantidad recibida se suma a las existencias actuales.
-     *
      * @param quantity cantidad que se desea agregar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
      */
     public void addQuantity(int quantity) {
         validatePositiveQuantity(quantity);
@@ -127,11 +169,6 @@ public class Inventory {
      * existencias disponibles.
      *
      * @param quantity cantidad que se desea reservar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
-     * @throws IllegalStateException si el inventario está dañado
-     * @throws IllegalStateException si no existe cantidad suficiente
      */
     public void reserveQuantity(int quantity) {
         validatePositiveQuantity(quantity);
@@ -154,12 +191,7 @@ public class Inventory {
     /**
      * Reemplaza la cantidad disponible por un nuevo valor.
      *
-     * Este método puede utilizarse para corregir o ajustar las existencias
-     * después de una verificación del inventario.
-     *
      * @param newQuantity nueva cantidad disponible
-     *
-     * @throws IllegalArgumentException si la nueva cantidad es negativa
      */
     public void adjustQuantity(int newQuantity) {
         validateNonNegativeQuantity(newQuantity);
@@ -170,20 +202,51 @@ public class Inventory {
      * Cambia la condición actual del inventario.
      *
      * @param newCondition nueva condición del inventario
-     *
-     * @throws IllegalArgumentException si la nueva condición es nula
      */
-    public void changeCondition(InventoryCondition newCondition) {
+    public void changeCondition(
+            InventoryCondition newCondition
+    ) {
         validateCondition(newCondition);
         this.condition = newCondition;
     }
 
     /**
-     * Valida que el inventario esté relacionado con un producto.
+     * Comprueba si este inventario representa
+     * el inventario indicado.
+     *
+     * @param inventory inventario que será comparado
+     * @return true si ambos tienen el mismo identificador
+     */
+    public boolean isSameInventory(
+            Inventory inventory
+    ) {
+        return inventory != null
+                && inventoryId.equals(
+                        inventory.inventoryId
+                );
+    }
+
+    /**
+     * Valida el identificador permanente.
+     *
+     * @param inventoryId identificador que será validado
+     */
+    private void validateInventoryId(
+            String inventoryId
+    ) {
+        if (inventoryId == null
+                || inventoryId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Inventory identifier must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Valida que el inventario esté relacionado
+     * con un producto.
      *
      * @param product producto que se desea validar
-     *
-     * @throws IllegalArgumentException si el producto es nulo
      */
     private void validateProduct(Product product) {
         if (product == null) {
@@ -194,13 +257,14 @@ public class Inventory {
     }
 
     /**
-     * Valida que el inventario esté relacionado con una bodega.
+     * Valida que el inventario esté relacionado
+     * con una bodega.
      *
      * @param warehouse bodega que se desea validar
-     *
-     * @throws IllegalArgumentException si la bodega es nula
      */
-    private void validateWarehouse(Warehouse warehouse) {
+    private void validateWarehouse(
+            Warehouse warehouse
+    ) {
         if (warehouse == null) {
             throw new IllegalArgumentException(
                     "Inventory must be associated with a warehouse."
@@ -211,13 +275,7 @@ public class Inventory {
     /**
      * Valida que una cantidad sea mayor que cero.
      *
-     * Esta validación se utiliza en operaciones que aumentan o reservan
-     * existencias.
-     *
      * @param quantity cantidad que se desea validar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
      */
     private void validatePositiveQuantity(int quantity) {
         if (quantity <= 0) {
@@ -230,12 +288,7 @@ public class Inventory {
     /**
      * Valida que una cantidad no sea negativa.
      *
-     * El valor cero es válido porque un producto puede quedar sin
-     * existencias disponibles.
-     *
      * @param quantity cantidad que se desea validar
-     *
-     * @throws IllegalArgumentException si la cantidad es negativa
      */
     private void validateNonNegativeQuantity(int quantity) {
         if (quantity < 0) {
@@ -249,14 +302,45 @@ public class Inventory {
      * Valida que la condición del inventario no sea nula.
      *
      * @param condition condición que se desea validar
-     *
-     * @throws IllegalArgumentException si la condición es nula
      */
-    private void validateCondition(InventoryCondition condition) {
+    private void validateCondition(
+            InventoryCondition condition
+    ) {
         if (condition == null) {
             throw new IllegalArgumentException(
                     "Inventory condition must not be null."
             );
         }
+    }
+
+    /**
+     * Compara inventarios mediante su identificador permanente.
+     *
+     * @param object objeto que será comparado
+     * @return true si representa el mismo inventario
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof Inventory inventory)) {
+            return false;
+        }
+
+        return inventoryId.equals(
+                inventory.inventoryId
+        );
+    }
+
+    /**
+     * Genera el código hash utilizando inventoryId.
+     *
+     * @return código hash del inventario
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(inventoryId);
     }
 }

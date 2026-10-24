@@ -6,124 +6,137 @@ import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.CatalogQueryUseCase;
 import application.ports.output.ProductQueryRepository;
+import application.ports.output.UserRepository;
 
 import java.util.List;
 
 /**
- * Servicio de aplicación encargado de consultar el catálogo.
+ * Servicio encargado de consultar el catálogo.
  *
- * Implementa el puerto de entrada CatalogQueryUseCase,
- * permitiendo consultar productos sin depender directamente
- * de esta implementación.
+ * Permisos:
  *
- * Aplica las siguientes reglas:
- *
- * - El comprador puede consultar productos publicados.
- * - El operador logístico puede consultar productos publicados.
- * - El vendedor puede consultar todos sus productos.
- * - El administrador puede consultar todo el catálogo.
- * - El supervisor puede consultar todo el catálogo.
+ * - Comprador y operador logístico: productos publicados.
+ * - Vendedor: todos sus propios productos.
+ * - Administrador y supervisor: catálogo completo.
  */
 public class CatalogQueryService
         implements CatalogQueryUseCase {
 
-    private final ProductQueryRepository productQueryRepository;
+    private final UserRepository userRepository;
+    private final ProductQueryRepository
+            productQueryRepository;
 
     /**
-     * Construye el servicio con el puerto
-     * de consulta requerido.
+     * Construye el servicio con los repositorios requeridos.
      *
-     * @param productQueryRepository repositorio
-     *                               de consulta de productos
+     * @param userRepository repositorio de usuarios
+     * @param productQueryRepository repositorio de productos
      */
     public CatalogQueryService(
+            UserRepository userRepository,
             ProductQueryRepository productQueryRepository
     ) {
-        if (productQueryRepository == null) {
-            throw new IllegalArgumentException(
-                    "Product query repository must not be null."
-            );
-        }
+        validateRepositories(
+                userRepository,
+                productQueryRepository
+        );
 
+        this.userRepository = userRepository;
         this.productQueryRepository =
                 productQueryRepository;
     }
 
-    /**
-     * Obtiene los productos visibles para el usuario.
-     *
-     * @param requestedBy usuario que realiza la consulta
-     * @return productos que el usuario puede consultar
-     */
     @Override
     public List<Product> findAccessibleProducts(
-            User requestedBy
+            String requesterIdentification
     ) {
-        validateActiveRequester(requestedBy);
+        User requester =
+                findRequester(
+                        requesterIdentification
+                );
+
+        validateActiveRequester(requester);
 
         List<Product> products =
                 productQueryRepository.findAll();
 
-        /*
-         * Administradores y supervisores pueden
-         * consultar todo el catálogo.
-         */
-        if (hasGlobalAccess(requestedBy)) {
+        if (hasGlobalAccess(requester)) {
             return List.copyOf(products);
         }
 
-        /*
-         * El vendedor puede consultar todos sus productos,
-         * incluso si están suspendidos o descontinuados.
-         */
-        if (requestedBy instanceof Seller seller) {
+        if (requester instanceof Seller seller) {
             return products.stream()
-                    .filter(seller::managesProduct)
+                    .filter(
+                            product ->
+                                    product.belongsToSeller(
+                                            seller.getIdentification()
+                                    )
+                    )
                     .toList();
         }
 
-        /*
-         * Los compradores y operadores logísticos solamente
-         * pueden visualizar productos publicados.
-         */
         return products.stream()
                 .filter(Product::isPublished)
                 .toList();
     }
 
-    /**
-     * Valida que la consulta sea realizada
-     * por un usuario activo.
-     *
-     * @param requestedBy usuario que realiza la consulta
-     */
-    private void validateActiveRequester(
-            User requestedBy
+    private User findRequester(
+            String identification
     ) {
-        if (requestedBy == null) {
-            throw new IllegalArgumentException(
-                    "Requesting user must not be null."
-            );
-        }
+        validateIdentification(identification);
 
-        if (!requestedBy.isActive()) {
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "Requesting user was not found."
+                                )
+                );
+    }
+
+    private void validateActiveRequester(
+            User requester
+    ) {
+        if (!requester.isActive()) {
             throw new IllegalStateException(
                     "Only active users can query the catalog."
             );
         }
     }
 
-    /**
-     * Indica si el usuario tiene acceso global
-     * de lectura sobre el catálogo.
-     *
-     * @param user usuario que realiza la consulta
-     * @return true si es administrador o supervisor
-     */
     private boolean hasGlobalAccess(User user) {
         return user.getRole()
                 == SystemRole.ADMINISTRATOR
                 || user.getRole()
                 == SystemRole.SUPERVISOR;
+    }
+
+    private void validateRepositories(
+            UserRepository userRepository,
+            ProductQueryRepository productQueryRepository
+    ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+
+        if (productQueryRepository == null) {
+            throw new IllegalArgumentException(
+                    "Product query repository must not be null."
+            );
+        }
+    }
+
+    private void validateIdentification(
+            String identification
+    ) {
+        if (identification == null
+                || identification.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Requester identification must not be empty."
+            );
+        }
     }
 }

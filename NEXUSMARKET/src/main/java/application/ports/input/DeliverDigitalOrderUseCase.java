@@ -3,32 +3,25 @@ package application.ports.input;
 import application.domain.models.Order;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para entregar pedidos exclusivamente digitales.
- *
- * Los pedidos digitales no necesitan bodega,
- * dirección física ni proceso de despacho.
+ * Puerto de entrada para entregar pedidos
+ * compuestos exclusivamente por productos digitales.
  */
 public interface DeliverDigitalOrderUseCase {
 
     /**
-     * Confirma la entrega de un pedido
-     * exclusivamente digital.
+     * Entrega un pedido digital del dominio.
      *
-     * El pedido debe estar pagado y no puede contener
-     * ningún producto físico.
-     *
-     * La operación cambia el estado del pedido:
-     *
-     * PAID -> DELIVERED
-     *
-     * @param order pedido digital que se desea entregar
-     * @return pedido actualizado en estado DELIVERED
-     *
-     * @throws IllegalArgumentException si el pedido es nulo
-     * @throws IllegalStateException si el pedido contiene
-     *         productos físicos, todavía no está pagado
-     *         o ya fue entregado
+     * @param order pedido que será entregado
+     * @return pedido actualizado
      */
     Order deliver(Order order);
+
+    /**
+     * Localiza y entrega un pedido digital
+     * mediante su identificador.
+     *
+     * @param orderId identificador del pedido
+     * @return pedido actualizado
+     */
+    Order deliverByOrderId(String orderId);
 }

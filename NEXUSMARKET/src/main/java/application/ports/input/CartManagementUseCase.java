@@ -5,39 +5,104 @@ import application.domain.models.Cart;
 import application.domain.models.Product;
 
 /**
- * Puerto de entrada que define el caso de uso
+ * Puerto de entrada que define las operaciones disponibles
  * para administrar el carrito de compras.
  *
- * Permite crear un carrito, agregar productos,
- * cambiar cantidades y eliminar productos.
+ * El comprador solamente puede administrar su propio carrito
+ * y debe encontrarse habilitado para realizar compras.
  */
 public interface CartManagementUseCase {
 
     /**
-     * Crea un carrito para un comprador autorizado.
+     * Crea un carrito utilizando la identificación
+     * del comprador.
      *
-     * @param buyer comprador propietario del carrito
+     * Esta operación está diseñada para la API REST.
+     *
+     * @param buyerIdentification identificación del comprador
      * @return carrito creado
+     */
+    Cart createCartByBuyerIdentification(
+            String buyerIdentification
+    );
+
+    /**
+     * Consulta el carrito perteneciente al comprador.
      *
-     * @throws IllegalArgumentException si el comprador es nulo
-     * @throws IllegalStateException si el comprador no puede comprar
+     * @param buyerIdentification identificación del comprador
+     * @return carrito encontrado
+     */
+    Cart findCartByBuyerIdentification(
+            String buyerIdentification
+    );
+
+    /**
+     * Agrega un producto utilizando identificadores.
+     *
+     * @param buyerIdentification identificación del comprador
+     * @param cartId identificador del carrito
+     * @param productId identificador del producto
+     * @param quantity cantidad agregada
+     * @return carrito actualizado
+     */
+    Cart addProductByIdentifiers(
+            String buyerIdentification,
+            String cartId,
+            String productId,
+            int quantity
+    );
+
+    /**
+     * Cambia la cantidad de un producto utilizando
+     * identificadores.
+     *
+     * @param buyerIdentification identificación del comprador
+     * @param cartId identificador del carrito
+     * @param productId identificador del producto
+     * @param newQuantity nueva cantidad
+     * @return carrito actualizado
+     */
+    Cart changeProductQuantityByIdentifiers(
+            String buyerIdentification,
+            String cartId,
+            String productId,
+            int newQuantity
+    );
+
+    /**
+     * Elimina un producto utilizando identificadores.
+     *
+     * @param buyerIdentification identificación del comprador
+     * @param cartId identificador del carrito
+     * @param productId identificador del producto
+     * @return carrito actualizado
+     */
+    Cart removeProductByIdentifiers(
+            String buyerIdentification,
+            String cartId,
+            String productId
+    );
+
+    /**
+     * Crea un carrito utilizando un comprador
+     * previamente localizado.
+     *
+     * Este método se conserva para mantener compatibilidad
+     * con las pruebas y componentes existentes.
+     *
+     * @param buyer comprador propietario
+     * @return carrito creado
      */
     Cart createCart(Buyer buyer);
 
     /**
-     * Agrega un producto al carrito.
+     * Agrega un producto utilizando objetos del dominio.
      *
-     * Si el producto ya existe, aumenta su cantidad
-     * en lugar de crear un elemento duplicado.
-     *
-     * @param buyer comprador que realiza la operación
-     * @param cart carrito que será modificado
-     * @param product producto que se desea agregar
-     * @param quantity cantidad que se desea agregar
+     * @param buyer comprador responsable
+     * @param cart carrito modificado
+     * @param product producto agregado
+     * @param quantity cantidad agregada
      * @return carrito actualizado
-     *
-     * @throws IllegalArgumentException si algún dato es inválido
-     * @throws IllegalStateException si el comprador no está autorizado
      */
     Cart addProduct(
             Buyer buyer,
@@ -47,16 +112,13 @@ public interface CartManagementUseCase {
     );
 
     /**
-     * Cambia la cantidad de un producto existente.
+     * Cambia la cantidad utilizando objetos del dominio.
      *
-     * @param buyer comprador que realiza la operación
-     * @param cart carrito que será modificado
-     * @param product producto cuya cantidad cambiará
+     * @param buyer comprador responsable
+     * @param cart carrito modificado
+     * @param product producto modificado
      * @param newQuantity nueva cantidad
      * @return carrito actualizado
-     *
-     * @throws IllegalArgumentException si algún dato es inválido
-     * @throws IllegalStateException si el comprador no está autorizado
      */
     Cart changeProductQuantity(
             Buyer buyer,
@@ -66,15 +128,12 @@ public interface CartManagementUseCase {
     );
 
     /**
-     * Elimina un producto del carrito.
+     * Elimina un producto utilizando objetos del dominio.
      *
-     * @param buyer comprador que realiza la operación
-     * @param cart carrito que será modificado
-     * @param product producto que se desea eliminar
+     * @param buyer comprador responsable
+     * @param cart carrito modificado
+     * @param product producto eliminado
      * @return carrito actualizado
-     *
-     * @throws IllegalArgumentException si algún dato es inválido
-     * @throws IllegalStateException si el comprador no está autorizado
      */
     Cart removeProduct(
             Buyer buyer,

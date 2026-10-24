@@ -6,22 +6,18 @@ import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.RefundQueryUseCase;
 import application.ports.output.RefundQueryRepository;
+import application.ports.output.UserRepository;
 
 import java.util.List;
 
 /**
  * Servicio encargado de consultar reembolsos.
  *
- * Implementa el puerto de entrada RefundQueryUseCase,
- * permitiendo consultar reembolsos sin depender
- * directamente de esta implementación.
+ * Los administradores y supervisores pueden consultar
+ * todos los reembolsos.
  *
- * Permisos:
- *
- * - El comprador consulta sus propios reembolsos.
- * - El administrador consulta todos para gestionarlos.
- * - El supervisor consulta todos para monitoreo.
- * - Los demás roles no tienen acceso financiero.
+ * Los compradores solamente pueden consultar los
+ * reembolsos asociados con sus propias devoluciones.
  */
 public class RefundQueryService
         implements RefundQueryUseCase {
@@ -29,29 +25,55 @@ public class RefundQueryService
     private final RefundQueryRepository
             refundQueryRepository;
 
+    private final UserRepository userRepository;
+
     /**
-     * Construye el servicio con el repositorio requerido.
+     * Constructor conservado para mantener compatibilidad
+     * con las pruebas que proporcionan directamente
+     * un usuario.
      *
-     * @param refundQueryRepository repositorio
-     *                              de reembolsos
+     * @param refundQueryRepository repositorio de reembolsos
      */
     public RefundQueryService(
             RefundQueryRepository refundQueryRepository
     ) {
-        if (refundQueryRepository == null) {
-            throw new IllegalArgumentException(
-                    "Refund query repository must not be null."
-            );
-        }
+        validateRefundQueryRepository(
+                refundQueryRepository
+        );
 
         this.refundQueryRepository =
                 refundQueryRepository;
+
+        this.userRepository = null;
     }
 
     /**
-     * Obtiene los reembolsos visibles para el usuario.
+     * Construye el servicio completo utilizado por la API.
      *
-     * @param requestedBy usuario que realiza la consulta
+     * @param refundQueryRepository repositorio de reembolsos
+     * @param userRepository repositorio de usuarios
+     */
+    public RefundQueryService(
+            RefundQueryRepository refundQueryRepository,
+            UserRepository userRepository
+    ) {
+        validateRefundQueryRepository(
+                refundQueryRepository
+        );
+
+        validateUserRepository(userRepository);
+
+        this.refundQueryRepository =
+                refundQueryRepository;
+
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Obtiene los reembolsos visibles para
+     * el usuario recibido.
+     *
+     * @param requestedBy usuario solicitante
      * @return reembolsos autorizados
      */
     @Override
@@ -63,51 +85,157 @@ public class RefundQueryService
         List<Refund> refunds =
                 refundQueryRepository.findAll();
 
-        /*
-         * Administradores y supervisores tienen
-         * acceso global a los reembolsos.
-         */
         if (hasGlobalAccess(requestedBy)) {
             return List.copyOf(refunds);
         }
 
-        /*
-         * El comprador solamente puede consultar
-         * los reembolsos que le pertenecen.
-         */
         if (requestedBy instanceof Buyer buyer) {
             return refunds.stream()
-                    .filter(
-                            refund ->
-                                    refund.getBuyer() == buyer
+                    .filter(refund ->
+                            isAccessibleForBuyer(
+                                    refund,
+                                    buyer
+                            )
                     )
                     .toList();
         }
 
-        /*
-         * Los vendedores, operadores logísticos
-         * y demás roles no tienen acceso financiero.
-         */
         throw new IllegalStateException(
                 "User is not authorized to query refunds."
         );
     }
 
     /**
-     * Valida que quien consulta sea un usuario activo.
+     * Consulta reembolsos mediante la identificación
+     * del solicitante.
+     */
+    @Override
+    public List<Refund>
+    findAccessibleRefundsByRequesterIdentification(
+            String requesterIdentification
+    ) {
+        User requester =
+                findRequester(
+                        requesterIdentification
+                );
+
+        return findAccessibleRefunds(requester);
+    }
+
+    /**
+     * Consulta un reembolso específico.
+     */
+    @Override
+    public Refund findAccessibleRefundByIdentifiers(
+            String requesterIdentification,
+            String refundId
+    ) {
+        validateText(
+                refundId,
+                "Refund identifier"
+        );
+
+        User requester =
+                findRequester(
+                        requesterIdentification
+                );
+
+        Refund refund =
+                refundQueryRepository
+                        .findById(refundId)
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Refund was not found."
+                                )
+                        );
+
+        validateActiveRequester(requester);
+
+        if (hasGlobalAccess(requester)) {
+            return refund;
+        }
+
+        if (requester instanceof Buyer buyer
+                && isAccessibleForBuyer(
+                        refund,
+                        buyer
+                )) {
+            return refund;
+        }
+
+        throw new IllegalStateException(
+                "User is not authorized to query this refund."
+        );
+    }
+
+    /**
+     * Comprueba si el reembolso pertenece
+     * al comprador indicado.
      *
-     * @param requestedBy usuario solicitante
+     * La comparación se realiza por identificación
+     * y no por referencia de memoria.
+     */
+    private boolean isAccessibleForBuyer(
+            Refund refund,
+            Buyer buyer
+    ) {
+        return refund != null
+                && refund.getBuyer() != null
+                && buyer.getIdentification().equals(
+                        refund
+                                .getBuyer()
+                                .getIdentification()
+                );
+    }
+
+    /**
+     * Localiza al usuario solicitante.
+     */
+    private User findRequester(
+            String identification
+    ) {
+        validateText(
+                identification,
+                "Requester identification"
+        );
+
+        validateUserRepositoryAvailable();
+
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
+    }
+
+    /**
+     * Determina si el usuario tiene acceso global.
+     */
+    private boolean hasGlobalAccess(
+            User user
+    ) {
+        return user.getRole()
+                == SystemRole.ADMINISTRATOR
+                || user.getRole()
+                == SystemRole.SUPERVISOR;
+    }
+
+    /**
+     * Valida que el solicitante exista
+     * y esté activo.
      */
     private void validateActiveRequester(
-            User requestedBy
+            User requester
     ) {
-        if (requestedBy == null) {
+        if (requester == null) {
             throw new IllegalArgumentException(
                     "Requesting user must not be null."
             );
         }
 
-        if (!requestedBy.isActive()) {
+        if (!requester.isActive()) {
             throw new IllegalStateException(
                     "Only active users can query refunds."
             );
@@ -115,16 +243,49 @@ public class RefundQueryService
     }
 
     /**
-     * Indica si el usuario posee acceso global
-     * de lectura sobre los reembolsos.
-     *
-     * @param user usuario que realiza la consulta
-     * @return true si es administrador o supervisor
+     * Valida un texto obligatorio.
      */
-    private boolean hasGlobalAccess(User user) {
-        return user.getRole()
-                == SystemRole.ADMINISTRATOR
-                || user.getRole()
-                == SystemRole.SUPERVISOR;
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null
+                || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Comprueba que el repositorio de usuarios
+     * esté disponible.
+     */
+    private void validateUserRepositoryAvailable() {
+        if (userRepository == null) {
+            throw new IllegalStateException(
+                    "User repository is required for identifier-based operations."
+            );
+        }
+    }
+
+    private void validateRefundQueryRepository(
+            RefundQueryRepository repository
+    ) {
+        if (repository == null) {
+            throw new IllegalArgumentException(
+                    "Refund query repository must not be null."
+            );
+        }
+    }
+
+    private void validateUserRepository(
+            UserRepository repository
+    ) {
+        if (repository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
     }
 }

@@ -6,22 +6,42 @@ import application.domain.models.User;
 import java.util.List;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para consultar devoluciones.
- *
- * El comprador solamente puede consultar sus
- * propias devoluciones. Los administradores y
- * supervisores tienen acceso global.
+ * Caso de uso encargado de consultar devoluciones.
  */
 public interface ReturnQueryUseCase {
 
     /**
-     * Obtiene las devoluciones visibles para el usuario.
+     * Consulta las devoluciones visibles
+     * para un usuario del dominio.
      *
-     * @param requestedBy usuario que realiza la consulta
-     * @return lista de devoluciones autorizadas
+     * @param requestedBy usuario solicitante
+     * @return devoluciones autorizadas
      */
     List<Return> findAccessibleReturns(
             User requestedBy
+    );
+
+    /**
+     * Consulta devoluciones mediante la identificación
+     * del usuario solicitante.
+     *
+     * @param requesterIdentification identificación del usuario
+     * @return devoluciones autorizadas
+     */
+    List<Return> findAccessibleReturnsByRequesterIdentification(
+            String requesterIdentification
+    );
+
+    /**
+     * Consulta una devolución específica respetando
+     * los permisos del solicitante.
+     *
+     * @param requesterIdentification identificación del usuario
+     * @param returnId identificador de la devolución
+     * @return devolución autorizada
+     */
+    Return findAccessibleReturnByIdentifiers(
+            String requesterIdentification,
+            String returnId
     );
 }

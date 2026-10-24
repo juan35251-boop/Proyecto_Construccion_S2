@@ -1,41 +1,38 @@
 package application.domain.models;
 
+import java.util.Objects;
+
 /**
- * Representa un elemento individual dentro de un carrito de compras.
+ * Representa un elemento individual dentro
+ * de un carrito de compras.
  *
- * Un elemento del carrito relaciona un {@link Product} con la cantidad
- * que el comprador desea adquirir. El producto no puede reemplazarse
- * después de crear el elemento, pero su cantidad sí puede modificarse.
+ * Un elemento relaciona un producto con la cantidad
+ * que el comprador desea adquirir.
  */
 public class CartItem {
 
     /**
-     * Producto asociado al elemento del carrito.
-     *
-     * Su referencia es inmutable después de crear el elemento.
+     * Producto asociado al elemento.
      */
     private final Product product;
 
     /**
-     * Cantidad solicitada del producto.
+     * Cantidad solicitada.
      *
      * Siempre debe ser mayor que cero.
      */
     private int quantity;
 
     /**
-     * Crea un elemento del carrito con un producto y una cantidad.
+     * Crea un elemento del carrito.
      *
-     * El producto y la cantidad se validan antes de almacenarse.
-     *
-     * @param product producto asociado al elemento
-     * @param quantity cantidad inicial solicitada
-     *
-     * @throws IllegalArgumentException si el producto es nulo
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
+     * @param product producto asociado
+     * @param quantity cantidad solicitada
      */
-    public CartItem(Product product, int quantity) {
+    public CartItem(
+            Product product,
+            int quantity
+    ) {
         validateProduct(product);
         validateQuantity(quantity);
 
@@ -44,74 +41,76 @@ public class CartItem {
     }
 
     /**
-     * Obtiene el producto asociado al elemento del carrito.
+     * Obtiene el producto asociado.
      *
-     * @return el producto registrado
+     * @return producto almacenado
      */
     public Product getProduct() {
         return product;
     }
 
     /**
-     * Obtiene la cantidad solicitada del producto.
+     * Obtiene la cantidad solicitada.
      *
-     * @return la cantidad actual
+     * @return cantidad actual
      */
     public int getQuantity() {
         return quantity;
     }
 
     /**
-     * Reemplaza la cantidad actual por una nueva cantidad.
+     * Reemplaza la cantidad actual.
      *
-     * @param newQuantity nueva cantidad solicitada
-     *
-     * @throws IllegalArgumentException si la nueva cantidad es menor
-     *                                  o igual a cero
+     * @param newQuantity nueva cantidad
      */
-    public void changeQuantity(int newQuantity) {
+    public void changeQuantity(
+            int newQuantity
+    ) {
         validateQuantity(newQuantity);
         this.quantity = newQuantity;
     }
 
     /**
-     * Aumenta la cantidad actual del producto.
+     * Aumenta la cantidad existente.
      *
-     * La cantidad recibida se suma a la cantidad que ya existe.
-     *
-     * @param quantityToAdd cantidad que se desea agregar
-     *
-     * @throws IllegalArgumentException si la cantidad que se desea agregar
-     *                                  es menor o igual a cero
+     * @param quantityToAdd cantidad agregada
      */
-    public void increaseQuantity(int quantityToAdd) {
+    public void increaseQuantity(
+            int quantityToAdd
+    ) {
         validateQuantity(quantityToAdd);
         this.quantity += quantityToAdd;
     }
 
     /**
-     * Determina si este elemento pertenece al producto recibido.
+     * Determina si el elemento pertenece al producto recibido.
      *
-     * La comparación utiliza la identidad de los objetos, por lo que
-     * comprueba que ambas referencias correspondan a la misma instancia
-     * de {@link Product}.
+     * La comparación se realiza mediante productId y no mediante
+     * la referencia del objeto en memoria. De esta manera funciona
+     * correctamente después de recuperar los datos desde MySQL.
      *
-     * @param product producto que se desea comparar
-     * @return {@code true} si corresponde a la misma instancia de producto;
-     *         de lo contrario, {@code false}
+     * @param comparedProduct producto comparado
+     * @return true si representa el mismo producto
      */
-    public boolean belongsTo(Product product) {
-        return this.product == product;
+    public boolean belongsTo(
+            Product comparedProduct
+    ) {
+        if (comparedProduct == null) {
+            return false;
+        }
+
+        return product.getProductId()
+                .equals(
+                        comparedProduct.getProductId()
+                );
     }
 
     /**
-     * Valida que el elemento tenga un producto asociado.
-     *
-     * @param product producto que se desea validar
-     *
-     * @throws IllegalArgumentException si el producto es nulo
+     * Valida el producto asociado.
      */
-    private void validateProduct(Product product) {
+    private void validateProduct(
+            Product product
+    ) {
         if (product == null) {
             throw new IllegalArgumentException(
                     "Cart item must contain a product."
@@ -121,17 +120,44 @@ public class CartItem {
 
     /**
      * Valida que una cantidad sea mayor que cero.
-     *
-     * @param quantity cantidad que se desea validar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
      */
-    private void validateQuantity(int quantity) {
+    private void validateQuantity(
+            int quantity
+    ) {
         if (quantity <= 0) {
             throw new IllegalArgumentException(
                     "Cart item quantity must be greater than zero."
             );
         }
+    }
+
+    /**
+     * Dos elementos se consideran iguales cuando
+     * corresponden al mismo producto.
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof CartItem cartItem)) {
+            return false;
+        }
+
+        return product.getProductId()
+                .equals(
+                        cartItem.product.getProductId()
+                );
+    }
+
+    /**
+     * Genera el código hash con el identificador del producto.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                product.getProductId()
+        );
     }
 }

@@ -9,58 +9,121 @@ import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.InventoryCondition;
 import application.domain.valueobjects.InventoryMovementType;
+import application.domain.valueobjects.SystemRole;
 import application.ports.input.RegisterInventoryUseCase;
 import application.ports.output.InventoryMovementRepository;
 import application.ports.output.InventoryRepository;
+import application.ports.output.ProductQueryRepository;
+import application.ports.output.UserRepository;
+import application.ports.output.WarehouseRepository;
 
 /**
- * Servicio de aplicación encargado de registrar
- * el inventario inicial de un producto.
+ * Servicio encargado de registrar el inventario inicial
+ * de productos físicos.
  *
- * Implementa el puerto de entrada RegisterInventoryUseCase,
- * permitiendo que los futuros controladores ejecuten esta
- * operación mediante un contrato independiente.
- *
- * También comprueba que cada usuario solamente administre
- * las bodegas y productos correspondientes a su responsabilidad.
+ * Resuelve los objetos mediante sus identificadores,
+ * verifica los permisos y conserva el estado actual en
+ * MySQL y el movimiento histórico en MongoDB.
  */
 public class RegisterInventoryService
         implements RegisterInventoryUseCase {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryMovementRepository movementRepository;
+    private final UserRepository userRepository;
+    private final ProductQueryRepository productQueryRepository;
+    private final WarehouseRepository warehouseRepository;
 
     /**
-     * Construye el servicio con los repositorios necesarios.
-     *
-     * @param inventoryRepository repositorio de inventarios
-     * @param movementRepository repositorio de movimientos
+     * Constructor completo utilizado por la API.
+     */
+    public RegisterInventoryService(
+            InventoryRepository inventoryRepository,
+            InventoryMovementRepository movementRepository,
+            UserRepository userRepository,
+            ProductQueryRepository productQueryRepository,
+            WarehouseRepository warehouseRepository
+    ) {
+        validatePersistenceRepositories(
+                inventoryRepository,
+                movementRepository
+        );
+
+        validateLookupRepositories(
+                userRepository,
+                productQueryRepository,
+                warehouseRepository
+        );
+
+        this.inventoryRepository =
+                inventoryRepository;
+        this.movementRepository =
+                movementRepository;
+        this.userRepository =
+                userRepository;
+        this.productQueryRepository =
+                productQueryRepository;
+        this.warehouseRepository =
+                warehouseRepository;
+    }
+
+    /**
+     * Constructor conservado para operaciones y pruebas
+     * que utilizan objetos del dominio directamente.
      */
     public RegisterInventoryService(
             InventoryRepository inventoryRepository,
             InventoryMovementRepository movementRepository
     ) {
-        validateRepositories(
+        validatePersistenceRepositories(
                 inventoryRepository,
                 movementRepository
         );
 
-        this.inventoryRepository = inventoryRepository;
-        this.movementRepository = movementRepository;
+        this.inventoryRepository =
+                inventoryRepository;
+        this.movementRepository =
+                movementRepository;
+
+        this.userRepository = null;
+        this.productQueryRepository = null;
+        this.warehouseRepository = null;
     }
 
     /**
-     * Registra el inventario de un producto en una bodega.
-     *
-     * El producto debe ser físico. El usuario debe ser un
-     * vendedor autorizado o un operador logístico autorizado.
-     *
-     * @param performedBy usuario que realiza el registro
-     * @param product producto almacenado
-     * @param warehouse bodega donde se encuentra
-     * @param initialQuantity cantidad inicial
-     * @param condition condición inicial del inventario
-     * @return inventario registrado
+     * Registra inventario mediante identificadores.
+     */
+    @Override
+    public Inventory register(
+            String performedByIdentification,
+            String productId,
+            String warehouseId,
+            int initialQuantity,
+            InventoryCondition condition
+    ) {
+        validateApiRepositories();
+
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Product product =
+                findProduct(productId);
+
+        Warehouse warehouse =
+                findWarehouse(warehouseId);
+
+        return register(
+                performedBy,
+                product,
+                warehouse,
+                initialQuantity,
+                condition
+        );
+    }
+
+    /**
+     * Registra inventario utilizando objetos
+     * previamente resueltos.
      */
     @Override
     public Inventory register(
@@ -70,34 +133,33 @@ public class RegisterInventoryService
             int initialQuantity,
             InventoryCondition condition
     ) {
-        validateRequiredData(product, warehouse);
+        validateAuthorizedUser(performedBy);
+        validateProduct(product);
+        validateWarehouse(warehouse);
+        validateInitialQuantity(initialQuantity);
+        validateCondition(condition);
+        validatePhysicalProduct(product);
 
-        validateUserAccess(
+        validateInventoryAccess(
                 performedBy,
                 product,
                 warehouse
         );
 
-        validatePhysicalProduct(product);
-
-        /*
-         * Inventory valida que la cantidad no sea negativa
-         * y que la condición no sea nula.
-         */
-        Inventory inventory = new Inventory(
-                product,
-                warehouse,
-                initialQuantity,
-                condition
-        );
+        Inventory inventory =
+                new Inventory(
+                        product,
+                        warehouse,
+                        initialQuantity,
+                        condition
+                );
 
         inventoryRepository.save(inventory);
 
         /*
-         * Si existen unidades iniciales, se registra un
-         * movimiento de entrada como evidencia.
-         *
-         * Un inventario iniciado en cero no genera movimiento.
+         * Una cantidad inicial positiva representa
+         * un ingreso de unidades y se registra como
+         * evidencia histórica en MongoDB.
          */
         if (initialQuantity > 0) {
             InventoryMovement movement =
@@ -114,13 +176,58 @@ public class RegisterInventoryService
         return inventory;
     }
 
-    /**
-     * Valida que existan los repositorios requeridos.
-     *
-     * @param inventoryRepository repositorio de inventarios
-     * @param movementRepository repositorio de movimientos
-     */
-    private void validateRepositories(
+    private User findUser(
+            String identification
+    ) {
+        validateText(
+                identification,
+                "User identification"
+        );
+
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "User was not found."
+                        )
+                );
+    }
+
+    private Product findProduct(
+            String productId
+    ) {
+        validateText(
+                productId,
+                "Product identifier"
+        );
+
+        return productQueryRepository
+                .findById(productId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Product was not found."
+                        )
+                );
+    }
+
+    private Warehouse findWarehouse(
+            String warehouseId
+    ) {
+        validateText(
+                warehouseId,
+                "Warehouse identifier"
+        );
+
+        return warehouseRepository
+                .findById(warehouseId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Warehouse was not found."
+                        )
+                );
+    }
+
+    private void validatePersistenceRepositories(
             InventoryRepository inventoryRepository,
             InventoryMovementRepository movementRepository
     ) {
@@ -137,42 +244,42 @@ public class RegisterInventoryService
         }
     }
 
-    /**
-     * Valida los objetos necesarios antes
-     * de comprobar los permisos.
-     *
-     * @param product producto que se desea almacenar
-     * @param warehouse bodega seleccionada
-     */
-    private void validateRequiredData(
-            Product product,
-            Warehouse warehouse
+    private void validateLookupRepositories(
+            UserRepository userRepository,
+            ProductQueryRepository productQueryRepository,
+            WarehouseRepository warehouseRepository
     ) {
-        if (product == null) {
+        if (userRepository == null) {
             throw new IllegalArgumentException(
-                    "Inventory product must not be null."
+                    "User repository must not be null."
             );
         }
 
-        if (warehouse == null) {
+        if (productQueryRepository == null) {
             throw new IllegalArgumentException(
-                    "Inventory warehouse must not be null."
+                    "Product query repository must not be null."
+            );
+        }
+
+        if (warehouseRepository == null) {
+            throw new IllegalArgumentException(
+                    "Warehouse repository must not be null."
             );
         }
     }
 
-    /**
-     * Comprueba que el usuario esté activo y tenga acceso
-     * al producto y a la bodega seleccionada.
-     *
-     * @param user usuario que realiza la operación
-     * @param product producto administrado
-     * @param warehouse bodega administrada
-     */
-    private void validateUserAccess(
-            User user,
-            Product product,
-            Warehouse warehouse
+    private void validateApiRepositories() {
+        if (userRepository == null
+                || productQueryRepository == null
+                || warehouseRepository == null) {
+            throw new IllegalStateException(
+                    "Identifier lookup repositories are not configured."
+            );
+        }
+    }
+
+    private void validateAuthorizedUser(
+            User user
     ) {
         if (user == null) {
             throw new IllegalArgumentException(
@@ -186,6 +293,78 @@ public class RegisterInventoryService
             );
         }
 
+        boolean isSeller =
+                user.getRole() == SystemRole.SELLER;
+
+        boolean isLogisticsOperator =
+                user.getRole()
+                        == SystemRole.LOGISTICS_OPERATOR;
+
+        if (!isSeller && !isLogisticsOperator) {
+            throw new IllegalStateException(
+                    "User is not authorized to register inventory."
+            );
+        }
+    }
+
+    private void validateProduct(
+            Product product
+    ) {
+        if (product == null) {
+            throw new IllegalArgumentException(
+                    "Inventory must be associated with a product."
+            );
+        }
+    }
+
+    private void validateWarehouse(
+            Warehouse warehouse
+    ) {
+        if (warehouse == null) {
+            throw new IllegalArgumentException(
+                    "Inventory must be associated with a warehouse."
+            );
+        }
+    }
+
+    private void validateInitialQuantity(
+            int initialQuantity
+    ) {
+        if (initialQuantity < 0) {
+            throw new IllegalArgumentException(
+                    "Initial inventory quantity must not be negative."
+            );
+        }
+    }
+
+    private void validateCondition(
+            InventoryCondition condition
+    ) {
+        if (condition == null) {
+            throw new IllegalArgumentException(
+                    "Inventory condition must not be null."
+            );
+        }
+    }
+
+    private void validatePhysicalProduct(
+            Product product
+    ) {
+        if (!product.isPhysical()) {
+            throw new IllegalStateException(
+                    "Digital products do not require inventory."
+            );
+        }
+    }
+
+    /**
+     * Verifica el alcance operativo del usuario.
+     */
+    private void validateInventoryAccess(
+            User user,
+            Product product,
+            Warehouse warehouse
+    ) {
         if (user instanceof Seller seller) {
             validateSellerAccess(
                     seller,
@@ -197,28 +376,36 @@ public class RegisterInventoryService
 
         if (user instanceof LogisticsOperator) {
             validateLogisticsAccess(warehouse);
-            return;
         }
-
-        throw new IllegalStateException(
-                "User is not authorized to register inventory."
-        );
     }
 
     /**
-     * Comprueba que el vendedor administre tanto el producto
-     * como la bodega donde registra las existencias.
+     * Valida que el producto y la bodega pertenezcan
+     * al vendedor.
      *
-     * @param seller vendedor que realiza la operación
-     * @param product producto seleccionado
-     * @param warehouse bodega seleccionada
+     * Para productos persistidos, sellerIdentification
+     * representa la fuente principal de propiedad.
+     * El método managesProduct se conserva como respaldo
+     * para productos antiguos sin propietario explícito.
      */
     private void validateSellerAccess(
             Seller seller,
             Product product,
             Warehouse warehouse
     ) {
-        if (!seller.managesProduct(product)) {
+        boolean ownsProduct;
+
+        if (product.getSellerIdentification() != null) {
+            ownsProduct =
+                    product.belongsToSeller(
+                            seller.getIdentification()
+                    );
+        } else {
+            ownsProduct =
+                    seller.managesProduct(product);
+        }
+
+        if (!ownsProduct) {
             throw new IllegalStateException(
                     "Seller can only register inventory for their own products."
             );
@@ -231,12 +418,6 @@ public class RegisterInventoryService
         }
     }
 
-    /**
-     * Comprueba que el operador logístico utilice
-     * una bodega perteneciente al Marketplace.
-     *
-     * @param warehouse bodega que se desea administrar
-     */
     private void validateLogisticsAccess(
             Warehouse warehouse
     ) {
@@ -247,19 +428,13 @@ public class RegisterInventoryService
         }
     }
 
-    /**
-     * Comprueba que el inventario corresponda
-     * a un producto físico.
-     *
-     * Los productos digitales no ocupan existencias
-     * ni requieren una bodega física.
-     *
-     * @param product producto que se desea almacenar
-     */
-    private void validatePhysicalProduct(Product product) {
-        if (!product.isPhysical()) {
-            throw new IllegalStateException(
-                    "Digital products do not require inventory."
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
             );
         }
     }

@@ -3,98 +3,151 @@ package application.domain.models;
 import application.domain.valueobjects.OrderStatus;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Representa la factura asociada a una orden de NexusMarket.
+ * Representa la factura asociada a un pedido de NexusMarket.
  *
- * Una factura solamente puede generarse cuando la orden ya no se encuentra
- * pendiente de pago. Desde la orden relacionada se puede consultar el
- * comprador y los productos incluidos en la compra.
+ * Cada factura posee un identificador permanente y pertenece
+ * a un único pedido.
  *
- * Esta clase conserva la relación con la orden, pero no duplica la
- * información del comprador ni de los elementos comprados.
+ * Una factura solamente puede generarse cuando el pedido ya
+ * superó el estado PENDING_PAYMENT.
  */
 public class Invoice {
 
     /**
-     * Orden a la que pertenece la factura.
+     * Identificador permanente de la factura.
+     */
+    private final String invoiceId;
+
+    /**
+     * Pedido al que pertenece la factura.
      *
-     * La orden asociada no puede reemplazarse después de crear la factura.
+     * El pedido asociado no puede reemplazarse
+     * después de crear la factura.
      */
     private final Order order;
 
     /**
-     * Crea una factura asociada a una orden.
+     * Crea una factura nueva y genera automáticamente
+     * su identificador.
      *
-     * La orden debe existir y no puede encontrarse en estado
-     * {@link OrderStatus#PENDING_PAYMENT}.
-     *
-     * @param order orden asociada a la factura
-     *
-     * @throws IllegalArgumentException si la orden es nula
-     * @throws IllegalStateException si la orden todavía está pendiente
-     *                               de pago
+     * @param order pedido asociado a la factura
      */
-    public Invoice(Order order) {
+    public Invoice(
+            Order order
+    ) {
+        this(
+                UUID.randomUUID().toString(),
+                order
+        );
+    }
+
+    /**
+     * Reconstruye una factura utilizando
+     * un identificador existente.
+     *
+     * Este constructor será utilizado por los
+     * adaptadores de persistencia.
+     *
+     * @param invoiceId identificador permanente
+     * @param order pedido asociado
+     */
+    public Invoice(
+            String invoiceId,
+            Order order
+    ) {
+        validateInvoiceId(invoiceId);
         validateOrder(order);
         validatePaidOrder(order);
 
+        this.invoiceId = invoiceId;
         this.order = order;
     }
 
     /**
-     * Obtiene la orden asociada a la factura.
+     * Obtiene el identificador de la factura.
      *
-     * @return la orden facturada
+     * @return identificador permanente
+     */
+    public String getInvoiceId() {
+        return invoiceId;
+    }
+
+    /**
+     * Obtiene el pedido asociado a la factura.
+     *
+     * @return pedido facturado
      */
     public Order getOrder() {
         return order;
     }
 
     /**
-     * Obtiene el comprador propietario de la orden.
+     * Obtiene el comprador propietario del pedido.
      *
-     * La información se obtiene directamente desde la orden relacionada.
-     *
-     * @return el comprador asociado a la factura
+     * @return comprador asociado
      */
     public Buyer getBuyer() {
         return order.getBuyer();
     }
 
     /**
-     * Obtiene los elementos incluidos en la orden facturada.
+     * Obtiene los elementos incluidos
+     * en el pedido facturado.
      *
-     * La lista se obtiene directamente mediante la orden asociada.
-     *
-     * @return los elementos de la orden
+     * @return elementos del pedido
      */
     public List<OrderItem> getItems() {
         return order.getItems();
     }
 
     /**
-     * Determina si la factura pertenece a la orden recibida.
+     * Determina si la factura pertenece al pedido indicado.
      *
-     * La comparación se realiza por identidad, por lo que ambas referencias
-     * deben apuntar a la misma instancia de {@link Order}.
+     * La comparación se realiza mediante orderId y no mediante
+     * referencias de memoria, porque el pedido puede ser
+     * reconstruido desde MySQL.
      *
-     * @param order orden que se desea comparar
-     * @return {@code true} si corresponde a la misma instancia;
-     *         de lo contrario, {@code false}
+     * @param comparedOrder pedido que se desea comparar
+     * @return true si corresponde al mismo pedido
      */
-    public boolean belongsTo(Order order) {
-        return this.order == order;
+    public boolean belongsTo(
+            Order comparedOrder
+    ) {
+        return comparedOrder != null
+                && order.getOrderId().equals(
+                        comparedOrder.getOrderId()
+                );
     }
 
     /**
-     * Valida que la factura esté relacionada con una orden.
+     * Valida el identificador de la factura.
      *
-     * @param order orden que se desea validar
-     *
-     * @throws IllegalArgumentException si la orden es nula
+     * @param invoiceId identificador validado
      */
-    private void validateOrder(Order order) {
+    private void validateInvoiceId(
+            String invoiceId
+    ) {
+        if (invoiceId == null
+                || invoiceId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Invoice identifier must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Valida que la factura esté relacionada
+     * con un pedido.
+     *
+     * @param order pedido validado
+     */
+    private void validateOrder(
+            Order order
+    ) {
         if (order == null) {
             throw new IllegalArgumentException(
                     "Invoice must be associated with an order."
@@ -103,21 +156,52 @@ public class Invoice {
     }
 
     /**
-     * Valida que la orden ya haya superado el estado pendiente de pago.
+     * Valida que el pedido haya superado
+     * el estado pendiente de pago.
      *
-     * De acuerdo con la regla implementada, la factura no puede generarse
-     * mientras la orden se encuentre en
-     * {@link OrderStatus#PENDING_PAYMENT}.
-     *
-     * @param order orden cuyo estado se desea validar
-     *
-     * @throws IllegalStateException si la orden está pendiente de pago
+     * @param order pedido cuyo estado será validado
      */
-    private void validatePaidOrder(Order order) {
-        if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
+    private void validatePaidOrder(
+            Order order
+    ) {
+        if (order.getStatus()
+                == OrderStatus.PENDING_PAYMENT) {
             throw new IllegalStateException(
                     "An invoice cannot be generated before payment."
             );
         }
+    }
+
+    /**
+     * Compara facturas mediante su identificador permanente.
+     *
+     * @param object objeto comparado
+     * @return true si representa la misma factura
+     */
+    @Override
+    public boolean equals(
+            Object object
+    ) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof Invoice invoice)) {
+            return false;
+        }
+
+        return invoiceId.equals(
+                invoice.invoiceId
+        );
+    }
+
+    /**
+     * Genera el código hash usando invoiceId.
+     *
+     * @return código hash de la factura
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(invoiceId);
     }
 }

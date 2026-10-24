@@ -5,28 +5,35 @@ import application.domain.models.Refund;
 import application.domain.models.Return;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para procesar reembolsos en NexusMarket.
- *
- * Todo reembolso debe estar asociado con una
- * devolución y ser procesado por un administrador activo.
+ * Caso de uso encargado de procesar reembolsos.
  */
 public interface ProcessRefundUseCase {
 
     /**
-     * Procesa y registra un reembolso.
+     * Procesa un reembolso utilizando
+     * objetos del dominio.
      *
-     * @param returnProcess devolución que origina el reembolso
-     * @param administrator administrador que procesa el reembolso
+     * @param returnProcess devolución relacionada
+     * @param administrator administrador responsable
      * @return reembolso procesado
-     *
-     * @throws IllegalArgumentException si la devolución
-     *         o el administrador son nulos
-     * @throws IllegalStateException si el administrador
-     *         no se encuentra activo
      */
     Refund process(
             Return returnProcess,
             Administrator administrator
+    );
+
+    /**
+     * Procesa un reembolso utilizando identificadores.
+     *
+     * Este método está preparado para ser utilizado
+     * desde la API REST.
+     *
+     * @param administratorIdentification administrador solicitante
+     * @param returnId identificador de la devolución
+     * @return reembolso procesado
+     */
+    Refund processByIdentifiers(
+            String administratorIdentification,
+            String returnId
     );
 }

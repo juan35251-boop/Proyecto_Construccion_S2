@@ -2,85 +2,118 @@ package application.domain.models;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Representa el carrito de compras de un comprador en NexusMarket.
+ * Representa el carrito de compras de un comprador
+ * dentro de NexusMarket.
  *
- * Un carrito pertenece obligatoriamente a un {@link Buyer} y contiene
- * una colección de elementos de tipo {@link CartItem}. Permite agregar
- * productos publicados, modificar sus cantidades y eliminarlos.
+ * Un carrito pertenece obligatoriamente a un comprador
+ * y contiene una colección de elementos de tipo CartItem.
  *
- * La clase controla sus productos internamente para evitar modificaciones
- * directas desde otras partes del sistema.
+ * Cada carrito posee un identificador estable que permite
+ * almacenarlo y recuperarlo desde una base de datos.
  */
 public class Cart {
 
     /**
+     * Identificador único del carrito.
+     */
+    private final String cartId;
+
+    /**
      * Comprador propietario del carrito.
-     *
-     * No puede ser reemplazado después de crear el carrito.
      */
     private final Buyer buyer;
 
     /**
      * Elementos agregados al carrito.
-     *
-     * Cada elemento relaciona un producto con la cantidad solicitada.
      */
     private final List<CartItem> items;
 
     /**
-     * Crea un carrito vacío perteneciente a un comprador.
+     * Crea un carrito nuevo y vacío.
      *
-     * @param buyer comprador propietario del carrito
+     * El identificador se genera automáticamente.
      *
-     * @throws IllegalArgumentException si el comprador es nulo
+     * @param buyer comprador propietario
      */
     public Cart(Buyer buyer) {
-        validateBuyer(buyer);
-
-        this.buyer = buyer;
-        this.items = new ArrayList<>();
+        this(
+                UUID.randomUUID().toString(),
+                buyer,
+                List.of()
+        );
     }
 
     /**
-     * Obtiene el comprador propietario del carrito.
+     * Reconstruye un carrito previamente almacenado.
      *
-     * @return el comprador asociado
+     * Este constructor será utilizado por el adaptador JPA
+     * para recuperar el carrito y sus productos.
+     *
+     * @param cartId identificador del carrito
+     * @param buyer comprador propietario
+     * @param items elementos almacenados
+     */
+    public Cart(
+            String cartId,
+            Buyer buyer,
+            List<CartItem> items
+    ) {
+        validateCartId(cartId);
+        validateBuyer(buyer);
+        validateItems(items);
+
+        this.cartId = cartId;
+        this.buyer = buyer;
+        this.items = new ArrayList<>(items);
+    }
+
+    /**
+     * Obtiene el identificador del carrito.
+     *
+     * @return identificador único
+     */
+    public String getCartId() {
+        return cartId;
+    }
+
+    /**
+     * Obtiene el comprador propietario.
+     *
+     * @return comprador asociado
      */
     public Buyer getBuyer() {
         return buyer;
     }
 
     /**
-     * Obtiene una copia no modificable de los elementos del carrito.
+     * Obtiene una copia de los elementos.
      *
-     * La copia impide agregar o eliminar elementos directamente desde
-     * fuera de esta clase. Las modificaciones deben realizarse mediante
-     * los métodos definidos por el carrito.
-     *
-     * @return una copia de los elementos del carrito
+     * @return elementos del carrito
      */
     public List<CartItem> getItems() {
         return List.copyOf(items);
     }
 
     /**
-     * Indica si el carrito no contiene productos.
+     * Indica si el carrito está vacío.
      *
-     * @return {@code true} si el carrito está vacío;
-     *         {@code false} si contiene al menos un elemento
+     * @return true si no contiene productos
      */
     public boolean isEmpty() {
         return items.isEmpty();
     }
 
     /**
-     * Determina si un producto se encuentra en el carrito.
+     * Determina si un producto está en el carrito.
      *
-     * @param product producto que se desea buscar
-     * @return {@code true} si el producto está en el carrito;
-     *         de lo contrario, {@code false}
+     * La comparación se realiza mediante productId.
+     *
+     * @param product producto buscado
+     * @return true si está agregado
      */
     public boolean containsProduct(Product product) {
         return findItem(product) != null;
@@ -89,69 +122,76 @@ public class Cart {
     /**
      * Agrega un producto publicado al carrito.
      *
-     * Si el producto ya está agregado, aumenta la cantidad del elemento
-     * existente. Si todavía no existe, crea un nuevo {@link CartItem}.
+     * Si el producto ya existe, aumenta su cantidad.
      *
-     * La validación de la cantidad se delega a la clase {@link CartItem}.
-     *
-     * @param product producto que se desea agregar
-     * @param quantity cantidad que se desea agregar
-     *
-     * @throws IllegalArgumentException si el producto es nulo
-     * @throws IllegalStateException si el producto no está publicado
+     * @param product producto agregado
+     * @param quantity cantidad agregada
      */
-    public void addProduct(Product product, int quantity) {
+    public void addProduct(
+            Product product,
+            int quantity
+    ) {
         validatePublishedProduct(product);
 
-        CartItem existingItem = findItem(product);
+        CartItem existingItem =
+                findItem(product);
 
         if (existingItem != null) {
             existingItem.increaseQuantity(quantity);
             return;
         }
 
-        items.add(new CartItem(product, quantity));
+        items.add(
+                new CartItem(
+                        product,
+                        quantity
+                )
+        );
     }
 
     /**
-     * Cambia la cantidad solicitada de un producto existente.
+     * Cambia la cantidad de un producto existente.
      *
-     * La validación de la nueva cantidad se delega a
-     * {@link CartItem#changeQuantity(int)}.
-     *
-     * @param product producto cuya cantidad se desea cambiar
-     * @param newQuantity nueva cantidad solicitada
-     *
-     * @throws IllegalStateException si el producto no está en el carrito
+     * @param product producto modificado
+     * @param newQuantity nueva cantidad
      */
     public void changeProductQuantity(
             Product product,
             int newQuantity
     ) {
-        CartItem item = findRequiredItem(product);
+        CartItem item =
+                findRequiredItem(product);
+
         item.changeQuantity(newQuantity);
     }
 
     /**
-     * Elimina un producto del carrito.
+     * Elimina un producto existente.
      *
-     * @param product producto que se desea eliminar
-     *
-     * @throws IllegalStateException si el producto no está en el carrito
+     * @param product producto eliminado
      */
-    public void removeProduct(Product product) {
-        CartItem item = findRequiredItem(product);
+    public void removeProduct(
+            Product product
+    ) {
+        CartItem item =
+                findRequiredItem(product);
+
         items.remove(item);
     }
 
     /**
      * Busca el elemento asociado a un producto.
      *
-     * @param product producto que se desea buscar
-     * @return el elemento encontrado o {@code null} si el producto
-     *         no se encuentra en el carrito
+     * @param product producto buscado
+     * @return elemento encontrado o null
      */
-    private CartItem findItem(Product product) {
+    private CartItem findItem(
+            Product product
+    ) {
+        if (product == null) {
+            return null;
+        }
+
         for (CartItem item : items) {
             if (item.belongsTo(product)) {
                 return item;
@@ -162,18 +202,16 @@ public class Cart {
     }
 
     /**
-     * Busca obligatoriamente el elemento asociado a un producto.
+     * Busca obligatoriamente un elemento.
      *
-     * A diferencia de {@link #findItem(Product)}, este método lanza una
-     * excepción cuando el producto no está registrado.
-     *
-     * @param product producto que se desea buscar
-     * @return el elemento asociado al producto
-     *
-     * @throws IllegalStateException si el producto no está en el carrito
+     * @param product producto buscado
+     * @return elemento encontrado
      */
-    private CartItem findRequiredItem(Product product) {
-        CartItem item = findItem(product);
+    private CartItem findRequiredItem(
+            Product product
+    ) {
+        CartItem item =
+                findItem(product);
 
         if (item == null) {
             throw new IllegalStateException(
@@ -185,13 +223,24 @@ public class Cart {
     }
 
     /**
-     * Valida que el carrito tenga un comprador asociado.
-     *
-     * @param buyer comprador que se desea validar
-     *
-     * @throws IllegalArgumentException si el comprador es nulo
+     * Valida el identificador del carrito.
      */
-    private void validateBuyer(Buyer buyer) {
+    private void validateCartId(
+            String cartId
+    ) {
+        if (cartId == null || cartId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Cart identifier must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Valida el comprador propietario.
+     */
+    private void validateBuyer(
+            Buyer buyer
+    ) {
         if (buyer == null) {
             throw new IllegalArgumentException(
                     "Cart must belong to a buyer."
@@ -200,16 +249,31 @@ public class Cart {
     }
 
     /**
-     * Valida que el producto exista y esté publicado.
-     *
-     * Solamente los productos publicados pueden agregarse al carrito.
-     *
-     * @param product producto que se desea validar
-     *
-     * @throws IllegalArgumentException si el producto es nulo
-     * @throws IllegalStateException si el producto no está publicado
+     * Valida la colección utilizada para reconstruir
+     * los elementos del carrito.
      */
-    private void validatePublishedProduct(Product product) {
+    private void validateItems(
+            List<CartItem> items
+    ) {
+        if (items == null) {
+            throw new IllegalArgumentException(
+                    "Cart items must not be null."
+            );
+        }
+
+        if (items.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(
+                    "Cart items must not contain null values."
+            );
+        }
+    }
+
+    /**
+     * Valida que el producto exista y esté publicado.
+     */
+    private void validatePublishedProduct(
+            Product product
+    ) {
         if (product == null) {
             throw new IllegalArgumentException(
                     "Cart product must not be null."
@@ -221,5 +285,30 @@ public class Cart {
                     "Only published products can be added to the cart."
             );
         }
+    }
+
+    /**
+     * Dos carritos son iguales cuando poseen
+     * el mismo identificador.
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof Cart cart)) {
+            return false;
+        }
+
+        return cartId.equals(cart.cartId);
+    }
+
+    /**
+     * Genera el código hash utilizando el identificador.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(cartId);
     }
 }

@@ -2,96 +2,83 @@ package application.services;
 
 import application.domain.models.Product;
 import application.domain.models.Seller;
+import application.domain.models.User;
 import application.domain.valueobjects.ProductStatus;
 import application.domain.valueobjects.ProductVariant;
 import application.ports.input.ProductCatalogUseCase;
+import application.ports.output.ProductQueryRepository;
 import application.ports.output.ProductRepository;
+import application.ports.output.UserRepository;
 
 /**
- * Servicio de aplicación encargado de administrar
+ * Servicio encargado de administrar
  * los productos del catálogo de un vendedor.
- *
- * Implementa el puerto de entrada ProductCatalogUseCase,
- * permitiendo administrar el catálogo sin depender
- * directamente de esta implementación.
- *
- * Permite agregar o eliminar variantes y cambiar
- * el estado de un producto.
  */
 public class ProductCatalogService
         implements ProductCatalogUseCase {
 
+    private final UserRepository userRepository;
+    private final ProductQueryRepository
+            productQueryRepository;
     private final ProductRepository productRepository;
 
     /**
-     * Construye el servicio con el repositorio de productos.
+     * Construye el servicio con sus repositorios.
      *
-     * @param productRepository repositorio utilizado
-     *                          para actualizar productos
+     * @param userRepository repositorio de usuarios
+     * @param productQueryRepository repositorio de consulta
+     * @param productRepository repositorio de escritura
      */
     public ProductCatalogService(
+            UserRepository userRepository,
+            ProductQueryRepository productQueryRepository,
             ProductRepository productRepository
     ) {
-        validateRepository(productRepository);
+        validateRepositories(
+                userRepository,
+                productQueryRepository,
+                productRepository
+        );
+
+        this.userRepository = userRepository;
+        this.productQueryRepository =
+                productQueryRepository;
         this.productRepository = productRepository;
     }
 
-    /**
-     * Agrega una variante a un producto del vendedor.
-     *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param variant variante que se desea agregar
-     * @return producto actualizado
-     */
     @Override
     public Product addVariant(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductVariant variant
     ) {
-        validateProductManagement(
-                seller,
-                product
-        );
+        Product product =
+                findAuthorizedProduct(
+                        sellerIdentification,
+                        productId
+                );
 
-        /*
-         * Product valida que la variante exista
-         * y que no se encuentre repetida.
-         */
         product.addVariant(variant);
-
         productRepository.save(product);
 
         return product;
     }
 
-    /**
-     * Elimina una variante de un producto.
-     *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param variant variante que se desea eliminar
-     * @return true si la variante existía y fue eliminada
-     */
     @Override
     public boolean removeVariant(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductVariant variant
     ) {
-        validateProductManagement(
-                seller,
-                product
-        );
+        Product product =
+                findAuthorizedProduct(
+                        sellerIdentification,
+                        productId
+                );
 
         boolean removed =
                 product.removeVariant(variant);
 
-        /*
-         * Solo se guarda el producto cuando realmente
-         * ocurrió una modificación.
-         */
         if (removed) {
             productRepository.save(product);
         }
@@ -99,47 +86,114 @@ public class ProductCatalogService
         return removed;
     }
 
-    /**
-     * Cambia el estado de un producto.
-     *
-     * Por ejemplo, permite pasar el producto a publicado,
-     * suspendido o descontinuado.
-     *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param newStatus nuevo estado
-     * @return producto actualizado
-     */
     @Override
     public Product changeStatus(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductStatus newStatus
     ) {
-        validateProductManagement(
-                seller,
-                product
-        );
+        Product product =
+                findAuthorizedProduct(
+                        sellerIdentification,
+                        productId
+                );
 
-        /*
-         * Product valida que el nuevo estado
-         * no sea nulo.
-         */
         product.changeStatus(newStatus);
-
         productRepository.save(product);
 
         return product;
     }
 
     /**
-     * Valida que el repositorio exista.
-     *
-     * @param productRepository repositorio de productos
+     * Recupera el vendedor y el producto y comprueba
+     * que el vendedor sea su propietario.
      */
-    private void validateRepository(
+    private Product findAuthorizedProduct(
+            String sellerIdentification,
+            String productId
+    ) {
+        Seller seller =
+                findSeller(sellerIdentification);
+
+        validateActiveSeller(seller);
+        validateProductId(productId);
+
+        Product product =
+                productQueryRepository
+                        .findById(productId)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Product was not found."
+                                        )
+                        );
+
+        if (!product.belongsToSeller(
+                seller.getIdentification()
+        )) {
+            throw new IllegalStateException(
+                    "Seller can only manage their own products."
+            );
+        }
+
+        return product;
+    }
+
+    private Seller findSeller(
+            String sellerIdentification
+    ) {
+        validateSellerIdentification(
+                sellerIdentification
+        );
+
+        User user =
+                userRepository
+                        .findByIdentification(
+                                sellerIdentification
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Seller was not found."
+                                        )
+                        );
+
+        if (!(user instanceof Seller seller)) {
+            throw new IllegalStateException(
+                    "Catalog operation requires a seller."
+            );
+        }
+
+        return seller;
+    }
+
+    private void validateActiveSeller(
+            Seller seller
+    ) {
+        if (!seller.isActive()) {
+            throw new IllegalStateException(
+                    "Only an active seller can manage products."
+            );
+        }
+    }
+
+    private void validateRepositories(
+            UserRepository userRepository,
+            ProductQueryRepository productQueryRepository,
             ProductRepository productRepository
     ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+
+        if (productQueryRepository == null) {
+            throw new IllegalArgumentException(
+                    "Product query repository must not be null."
+            );
+        }
+
         if (productRepository == null) {
             throw new IllegalArgumentException(
                     "Product repository must not be null."
@@ -147,38 +201,24 @@ public class ProductCatalogService
         }
     }
 
-    /**
-     * Comprueba que el vendedor esté activo y que administre
-     * el producto sobre el cual realiza la operación.
-     *
-     * @param seller vendedor que realiza la operación
-     * @param product producto administrado
-     */
-    private void validateProductManagement(
-            Seller seller,
-            Product product
+    private void validateSellerIdentification(
+            String identification
     ) {
-        if (seller == null) {
+        if (identification == null
+                || identification.isBlank()) {
             throw new IllegalArgumentException(
-                    "Catalog operation requires a seller."
+                    "Seller identification must not be empty."
             );
         }
+    }
 
-        if (!seller.isActive()) {
-            throw new IllegalStateException(
-                    "Only an active seller can manage products."
-            );
-        }
-
-        if (product == null) {
+    private void validateProductId(
+            String productId
+    ) {
+        if (productId == null
+                || productId.isBlank()) {
             throw new IllegalArgumentException(
-                    "Product must not be null."
-            );
-        }
-
-        if (!seller.managesProduct(product)) {
-            throw new IllegalStateException(
-                    "Seller can only manage their own products."
+                    "Product identification must not be empty."
             );
         }
     }

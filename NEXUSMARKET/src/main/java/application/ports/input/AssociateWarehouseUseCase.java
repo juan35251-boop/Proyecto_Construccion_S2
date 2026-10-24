@@ -5,33 +5,40 @@ import application.domain.models.Seller;
 import application.domain.models.Warehouse;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para asociar bodegas con vendedores.
+ * Puerto de entrada para asociar bodegas registradas
+ * con vendedores.
  *
- * Solamente un administrador activo puede realizar
+ * Solamente un administrador activo puede ejecutar
  * esta operación.
  */
 public interface AssociateWarehouseUseCase {
 
     /**
-     * Asocia una bodega registrada con un vendedor.
+     * Asocia objetos del dominio ya localizados.
      *
-     * La bodega debe estar registrada previamente y
-     * debe pertenecer a la categoría SELLER.
-     *
-     * @param associatedBy administrador que realiza la asociación
+     * @param associatedBy administrador responsable
      * @param seller vendedor que administrará la bodega
-     * @param warehouse bodega que será asociada
-     *
-     * @throws IllegalArgumentException si algún dato es nulo
-     *         o la bodega no pertenece a un vendedor
-     * @throws IllegalStateException si el administrador está
-     *         inactivo, la bodega no está registrada o ya
-     *         se encuentra asociada con el vendedor
+     * @param warehouse bodega registrada
      */
     void associate(
             Administrator associatedBy,
             Seller seller,
             Warehouse warehouse
+    );
+
+    /**
+     * Localiza y asocia los objetos mediante
+     * sus identificadores.
+     *
+     * Esta operación es utilizada por la API REST.
+     *
+     * @param administratorIdentification administrador responsable
+     * @param sellerIdentification vendedor seleccionado
+     * @param warehouseId bodega seleccionada
+     */
+    void associate(
+            String administratorIdentification,
+            String sellerIdentification,
+            String warehouseId
     );
 }

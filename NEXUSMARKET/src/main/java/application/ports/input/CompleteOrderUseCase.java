@@ -3,27 +3,25 @@ package application.ports.input;
 import application.domain.models.Order;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para finalizar pedidos en NexusMarket.
- *
- * La finalización representa el cierre satisfactorio
- * de un pedido después de confirmar su entrega.
+ * Puerto de entrada para finalizar pedidos
+ * cuya entrega ya fue confirmada.
  */
 public interface CompleteOrderUseCase {
 
     /**
-     * Finaliza un pedido que ya fue entregado.
+     * Finaliza un pedido del dominio.
      *
-     * La operación cambia el estado:
-     *
-     * DELIVERED -> FINALIZED
-     *
-     * @param order pedido que se desea finalizar
+     * @param order pedido entregado
      * @return pedido finalizado
-     *
-     * @throws IllegalArgumentException si el pedido es nulo
-     * @throws IllegalStateException si el pedido todavía
-     *         no fue entregado o ya se encuentra finalizado
      */
     Order complete(Order order);
+
+    /**
+     * Localiza y finaliza un pedido
+     * mediante su identificador.
+     *
+     * @param orderId identificador del pedido
+     * @return pedido finalizado
+     */
+    Order completeByOrderId(String orderId);
 }

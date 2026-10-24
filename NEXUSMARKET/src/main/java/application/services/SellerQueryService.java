@@ -48,6 +48,9 @@ public class SellerQueryService
     /**
      * Busca un vendedor mediante su identificación.
      *
+     * Esta operación recibe directamente al usuario
+     * que realiza la consulta.
+     *
      * @param requestedBy usuario que realiza la consulta
      * @param identification identificación del vendedor
      * @return vendedor encontrado
@@ -60,10 +63,6 @@ public class SellerQueryService
         validateActiveRequester(requestedBy);
         validateIdentification(identification);
 
-        /*
-         * Primero se consulta un usuario mediante
-         * la identificación proporcionada.
-         */
         User foundUser = userRepository
                 .findByIdentification(identification)
                 .orElseThrow(
@@ -72,10 +71,6 @@ public class SellerQueryService
                         )
                 );
 
-        /*
-         * Se comprueba que el usuario encontrado
-         * realmente sea un vendedor.
-         */
         if (!(foundUser instanceof Seller seller)) {
             throw new IllegalStateException(
                     "The requested user is not a seller."
@@ -104,15 +99,79 @@ public class SellerQueryService
         validateActiveRequester(requestedBy);
         validateGlobalAccess(requestedBy);
 
-        /*
-         * Se consultan todos los usuarios y se conservan
-         * solamente los que son vendedores.
-         */
         return userRepository.findAll()
                 .stream()
                 .filter(Seller.class::isInstance)
                 .map(Seller.class::cast)
                 .toList();
+    }
+
+    /**
+     * Busca un vendedor utilizando la identificación
+     * del usuario que realiza la consulta.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @param sellerIdentification identificación del vendedor consultado
+     * @return vendedor encontrado
+     */
+    @Override
+    public Seller findByIdentification(
+            String requesterIdentification,
+            String sellerIdentification
+    ) {
+        User requestedBy = findRequester(
+                requesterIdentification
+        );
+
+        return findByIdentification(
+                requestedBy,
+                sellerIdentification
+        );
+    }
+
+    /**
+     * Obtiene todos los vendedores utilizando
+     * la identificación del solicitante.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @return lista de vendedores
+     */
+    @Override
+    public List<Seller> findAll(
+            String requesterIdentification
+    ) {
+        User requestedBy = findRequester(
+                requesterIdentification
+        );
+
+        return findAll(requestedBy);
+    }
+
+    /**
+     * Busca al usuario que realiza la consulta.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @return usuario solicitante
+     */
+    private User findRequester(
+            String requesterIdentification
+    ) {
+        if (requesterIdentification == null
+                || requesterIdentification.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Requester identification must not be empty."
+            );
+        }
+
+        return userRepository
+                .findByIdentification(
+                        requesterIdentification
+                )
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
     }
 
     /**
@@ -165,8 +224,11 @@ public class SellerQueryService
     ) {
         boolean isSameSeller =
                 requestedBy instanceof Seller
-                        && requestedBy.getIdentification()
-                        .equals(seller.getIdentification());
+                        && requestedBy
+                        .getIdentification()
+                        .equals(
+                                seller.getIdentification()
+                        );
 
         if (!isSameSeller
                 && !hasGlobalAccess(requestedBy)) {
@@ -194,9 +256,6 @@ public class SellerQueryService
     /**
      * Indica si el usuario posee acceso global
      * de consulta.
-     *
-     * Esta autorización no permite modificar información
-     * fuera de sus responsabilidades.
      *
      * @param user usuario que realiza la consulta
      * @return true si es administrador o supervisor

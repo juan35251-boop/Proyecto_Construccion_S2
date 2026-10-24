@@ -1,27 +1,23 @@
 package application.ports.input;
 
 import application.domain.models.Product;
-import application.domain.models.User;
 
 import java.util.List;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para consultar el catálogo de NexusMarket.
- *
- * Los productos visibles dependen del rol
- * del usuario que realiza la consulta.
+ * Puerto de entrada utilizado para consultar
+ * el catálogo de NexusMarket.
  */
 public interface CatalogQueryUseCase {
 
     /**
-     * Obtiene los productos que el usuario
-     * tiene autorización para consultar.
+     * Obtiene los productos visibles para el usuario.
      *
-     * @param requestedBy usuario que realiza la consulta
-     * @return lista de productos accesibles
+     * @param requesterIdentification identificación
+     *        del usuario solicitante
+     * @return productos que puede consultar
      */
     List<Product> findAccessibleProducts(
-            User requestedBy
+            String requesterIdentification
     );
 }

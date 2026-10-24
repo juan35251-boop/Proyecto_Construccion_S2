@@ -1,58 +1,54 @@
 package application.ports.input;
 
 import application.domain.models.Product;
-import application.domain.models.Seller;
 import application.domain.valueobjects.ProductStatus;
 import application.domain.valueobjects.ProductVariant;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para administrar el catálogo de productos.
- *
- * Un vendedor activo solamente puede modificar
- * productos pertenecientes a su propio catálogo.
+ * Puerto de entrada para administrar
+ * los productos de un vendedor.
  */
 public interface ProductCatalogUseCase {
 
     /**
-     * Agrega una variante a un producto del vendedor.
+     * Agrega una variante a un producto.
      *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param variant variante que se desea agregar
+     * @param sellerIdentification identificación del vendedor
+     * @param productId identificador del producto
+     * @param variant variante que será agregada
      * @return producto actualizado
      */
     Product addVariant(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductVariant variant
     );
 
     /**
      * Elimina una variante de un producto.
      *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param variant variante que se desea eliminar
-     * @return true si la variante existía y fue eliminada
+     * @param sellerIdentification identificación del vendedor
+     * @param productId identificador del producto
+     * @param variant variante que será eliminada
+     * @return true si la variante fue eliminada
      */
     boolean removeVariant(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductVariant variant
     );
 
     /**
      * Cambia el estado de un producto.
      *
-     * @param seller vendedor que realiza la operación
-     * @param product producto que será modificado
-     * @param newStatus nuevo estado del producto
+     * @param sellerIdentification identificación del vendedor
+     * @param productId identificador del producto
+     * @param newStatus nuevo estado
      * @return producto actualizado
      */
     Product changeStatus(
-            Seller seller,
-            Product product,
+            String sellerIdentification,
+            String productId,
             ProductStatus newStatus
     );
 }

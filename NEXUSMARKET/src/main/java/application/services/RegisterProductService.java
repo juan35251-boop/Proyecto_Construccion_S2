@@ -2,103 +2,133 @@ package application.services;
 
 import application.domain.models.Product;
 import application.domain.models.Seller;
+import application.domain.models.User;
 import application.domain.valueobjects.ProductStatus;
 import application.domain.valueobjects.ProductType;
 import application.ports.input.RegisterProductUseCase;
 import application.ports.output.ProductRepository;
+import application.ports.output.UserRepository;
 
 /**
- * Servicio de aplicación encargado de registrar productos.
+ * Servicio encargado de registrar productos.
  *
- * Implementa el puerto de entrada RegisterProductUseCase,
- * permitiendo que los futuros controladores REST ejecuten
- * esta operación mediante un contrato independiente.
- *
- * Coordina las reglas necesarias para que un vendedor activo
- * pueda crear un producto, asociarlo con su catálogo y
- * guardarlo mediante el repositorio.
+ * Localiza al vendedor mediante su identificación,
+ * comprueba que esté activo y registra el producto
+ * con una relación persistente hacia su propietario.
  */
 public class RegisterProductService
         implements RegisterProductUseCase {
 
+    private final UserRepository userRepository;
     private final ProductRepository productRepository;
 
     /**
-     * Construye el servicio con el repositorio que almacenará
-     * los productos.
+     * Construye el servicio con sus repositorios.
      *
-     * La dependencia se recibe mediante el constructor para
-     * facilitar las pruebas y evitar que el servicio dependa
-     * directamente de una tecnología de base de datos.
-     *
-     * @param productRepository repositorio utilizado
-     *                          para guardar productos
+     * @param userRepository repositorio de usuarios
+     * @param productRepository repositorio de productos
      */
     public RegisterProductService(
+            UserRepository userRepository,
             ProductRepository productRepository
     ) {
-        validateRepository(productRepository);
+        validateRepositories(
+                userRepository,
+                productRepository
+        );
+
+        this.userRepository = userRepository;
         this.productRepository = productRepository;
     }
 
     /**
-     * Registra un producto administrado por un vendedor.
+     * Registra un producto perteneciente al vendedor.
      *
-     * Primero valida que el vendedor exista y esté activo.
-     * Después crea el producto, lo agrega al catálogo del
-     * vendedor y lo guarda mediante el puerto de salida.
-     *
-     * @param seller vendedor que registra el producto
-     * @param productType tipo del producto: físico o digital
-     * @param status estado inicial del producto
+     * @param sellerIdentification identificación del vendedor
+     * @param productType tipo del producto
+     * @param status estado inicial
      * @return producto registrado
-     *
-     * @throws IllegalArgumentException si el vendedor,
-     *         el tipo o el estado son inválidos
-     * @throws IllegalStateException si el vendedor no está activo
      */
     @Override
     public Product register(
-            Seller seller,
+            String sellerIdentification,
             ProductType productType,
             ProductStatus status
     ) {
-        validateSeller(seller);
+        Seller seller =
+                findSeller(sellerIdentification);
+
         validateActiveSeller(seller);
 
-        /*
-         * El constructor de Product valida que el tipo
-         * y el estado no sean nulos.
-         */
-        Product product = new Product(
-                productType,
-                status
-        );
+        Product product =
+                Product.createForSeller(
+                        seller.getIdentification(),
+                        productType,
+                        status
+                );
 
         /*
-         * La relación entre el vendedor y el producto
-         * se mantiene dentro del modelo Seller.
+         * Conserva la relación dentro del modelo cargado
+         * durante la operación actual.
          */
         seller.registerProduct(product);
 
-        /*
-         * El servicio utiliza el puerto de salida y desconoce
-         * si el producto será almacenado en memoria, MySQL
-         * u otra tecnología.
-         */
         productRepository.save(product);
 
         return product;
     }
 
     /**
-     * Valida que el servicio reciba un repositorio.
-     *
-     * @param productRepository repositorio que se desea validar
+     * Busca y valida al vendedor solicitante.
      */
-    private void validateRepository(
+    private Seller findSeller(
+            String sellerIdentification
+    ) {
+        validateIdentification(
+                sellerIdentification
+        );
+
+        User user =
+                userRepository
+                        .findByIdentification(
+                                sellerIdentification
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Seller was not found."
+                                        )
+                        );
+
+        if (!(user instanceof Seller seller)) {
+            throw new IllegalStateException(
+                    "Only a seller can register products."
+            );
+        }
+
+        return seller;
+    }
+
+    private void validateActiveSeller(
+            Seller seller
+    ) {
+        if (!seller.isActive()) {
+            throw new IllegalStateException(
+                    "Only an active seller can register products."
+            );
+        }
+    }
+
+    private void validateRepositories(
+            UserRepository userRepository,
             ProductRepository productRepository
     ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+
         if (productRepository == null) {
             throw new IllegalArgumentException(
                     "Product repository must not be null."
@@ -106,28 +136,13 @@ public class RegisterProductService
         }
     }
 
-    /**
-     * Valida que se haya proporcionado un vendedor.
-     *
-     * @param seller vendedor que se desea validar
-     */
-    private void validateSeller(Seller seller) {
-        if (seller == null) {
+    private void validateIdentification(
+            String identification
+    ) {
+        if (identification == null
+                || identification.isBlank()) {
             throw new IllegalArgumentException(
-                    "Product must be registered by a seller."
-            );
-        }
-    }
-
-    /**
-     * Comprueba que el vendedor tenga un estado activo.
-     *
-     * @param seller vendedor que se desea validar
-     */
-    private void validateActiveSeller(Seller seller) {
-        if (!seller.isActive()) {
-            throw new IllegalStateException(
-                    "Only an active seller can register products."
+                    "Seller identification must not be empty."
             );
         }
     }

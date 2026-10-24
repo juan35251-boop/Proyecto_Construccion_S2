@@ -7,41 +7,57 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Repositorio de bodegas almacenado en memoria.
+ * Implementación en memoria del repositorio de bodegas.
  *
- * Se utiliza para probar los servicios sin conectar
- * todavía una base de datos.
+ * Se utiliza exclusivamente durante las pruebas para evitar
+ * depender de una base de datos real.
  */
 public class InMemoryWarehouseRepository
         implements WarehouseRepository {
 
-    private final List<Warehouse> warehouses =
-            new ArrayList<>();
-
+    private final List<Warehouse> warehouses;
     private int saveCount;
 
     /**
-     * Guarda una bodega en memoria.
+     * Construye un repositorio vacío.
+     */
+    public InMemoryWarehouseRepository() {
+        this.warehouses = new ArrayList<>();
+        this.saveCount = 0;
+    }
+
+    /**
+     * Guarda una bodega en memoria y registra
+     * cuántas veces fue ejecutada esta operación.
+     *
+     * @param warehouse bodega que será almacenada
      */
     @Override
     public void save(Warehouse warehouse) {
-        if (!warehouses.contains(warehouse)) {
-            warehouses.add(warehouse);
-        }
+        validateWarehouse(warehouse);
 
+        warehouses.add(warehouse);
         saveCount++;
     }
 
     /**
-     * Comprueba si la instancia de bodega está registrada.
+     * Comprueba si una bodega se encuentra
+     * almacenada en memoria.
+     *
+     * @param warehouse bodega que se desea comprobar
+     * @return true si la bodega está almacenada
      */
     @Override
     public boolean exists(Warehouse warehouse) {
+        validateWarehouse(warehouse);
         return warehouses.contains(warehouse);
     }
 
     /**
-     * Devuelve una copia de las bodegas almacenadas.
+     * Obtiene una copia inmutable de todas
+     * las bodegas almacenadas.
+     *
+     * @return lista de bodegas
      */
     @Override
     public List<Warehouse> findAll() {
@@ -49,9 +65,40 @@ public class InMemoryWarehouseRepository
     }
 
     /**
-     * Indica cuántas veces se ejecutó el guardado.
+     * Obtiene el número de veces que se ejecutó
+     * la operación de guardado.
+     *
+     * Este método permite comprobar en las pruebas
+     * que el servicio solicitó guardar la bodega.
+     *
+     * @return cantidad de operaciones de guardado
      */
     public int getSaveCount() {
         return saveCount;
+    }
+
+    /**
+     * Obtiene la cantidad total de bodegas
+     * actualmente almacenadas.
+     *
+     * @return cantidad de bodegas almacenadas
+     */
+    public int count() {
+        return warehouses.size();
+    }
+
+    /**
+     * Valida que la bodega recibida no sea nula.
+     *
+     * @param warehouse bodega recibida
+     */
+    private void validateWarehouse(
+            Warehouse warehouse
+    ) {
+        if (warehouse == null) {
+            throw new IllegalArgumentException(
+                    "Warehouse must not be null."
+            );
+        }
     }
 }

@@ -8,8 +8,8 @@ import application.domain.valueobjects.SystemRole;
 import application.domain.valueobjects.UserStatus;
 import application.domain.valueobjects.WarehouseOwnerType;
 import application.ports.output.UserRepository;
+import application.ports.output.WarehouseRepository;
 import org.junit.jupiter.api.Test;
-import application.domain.models.Administrator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,20 +27,27 @@ class RegisterSellerServiceTest {
 
     /**
      * Verifica que un administrador activo pueda
-     * registrar un vendedor.
+     * registrar un vendedor y su primera bodega.
      */
     @Test
     void shouldRegisterSellerByActiveAdministrator() {
-        InMemoryUserRepository repository =
+        InMemoryUserRepository userRepository =
                 new InMemoryUserRepository();
 
+        InMemoryWarehouseRepository warehouseRepository =
+                new InMemoryWarehouseRepository();
+
         RegisterSellerService service =
-                new RegisterSellerService(repository);
+                new RegisterSellerService(
+                        userRepository,
+                        warehouseRepository
+                );
 
         Administrator administrator =
                 createAdministrator(UserStatus.ACTIVE);
 
-        Warehouse warehouse = createSellerWarehouse();
+        Warehouse warehouse =
+                createSellerWarehouse();
 
         Seller seller = service.register(
                 administrator,
@@ -51,23 +58,71 @@ class RegisterSellerServiceTest {
                 warehouse
         );
 
-        assertEquals("2001", seller.getIdentification());
-        assertEquals("Test Seller", seller.getFullName());
-        assertEquals("seller@email.com", seller.getEmail());
-        assertEquals(UserStatus.ACTIVE, seller.getStatus());
-        assertEquals(SystemRole.SELLER, seller.getRole());
-        assertTrue(seller.managesWarehouse(warehouse));
-        assertTrue(repository.contains(seller));
+        assertEquals(
+                "2001",
+                seller.getIdentification()
+        );
+
+        assertEquals(
+                "Test Seller",
+                seller.getFullName()
+        );
+
+        assertEquals(
+                "seller@email.com",
+                seller.getEmail()
+        );
+
+        assertEquals(
+                UserStatus.ACTIVE,
+                seller.getStatus()
+        );
+
+        assertEquals(
+                SystemRole.SELLER,
+                seller.getRole()
+        );
+
+        assertTrue(
+                seller.managesWarehouse(warehouse)
+        );
+
+        assertTrue(
+                userRepository.contains(seller)
+        );
+
+        assertTrue(
+                warehouseRepository.exists(warehouse)
+        );
     }
 
     /**
-     * Verifica que el repositorio sea obligatorio.
+     * Verifica que el repositorio de usuarios
+     * sea obligatorio.
      */
     @Test
-    void shouldRejectNullRepository() {
+    void shouldRejectNullUserRepository() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new RegisterSellerService(null)
+                () -> new RegisterSellerService(
+                        null,
+                        new InMemoryWarehouseRepository()
+                )
+        );
+    }
+
+    /**
+     * Verifica que el repositorio de bodegas
+     * sea obligatorio.
+     */
+    @Test
+    void shouldRejectNullWarehouseRepository() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new RegisterSellerService(
+                        new InMemoryUserRepository(),
+                        null
+                )
         );
     }
 
@@ -77,12 +132,13 @@ class RegisterSellerServiceTest {
      */
     @Test
     void shouldRejectNullAdministrator() {
-        RegisterSellerService service = createService();
+        RegisterSellerService service =
+                createService();
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.register(
-                         (Administrator) null,
+                        (Administrator) null,
                         "2001",
                         "Test Seller",
                         "seller@email.com",
@@ -98,10 +154,13 @@ class RegisterSellerServiceTest {
      */
     @Test
     void shouldRejectInactiveAdministrator() {
-        RegisterSellerService service = createService();
+        RegisterSellerService service =
+                createService();
 
         Administrator administrator =
-                createAdministrator(UserStatus.INACTIVE);
+                createAdministrator(
+                        UserStatus.INACTIVE
+                );
 
         assertThrows(
                 IllegalStateException.class,
@@ -122,10 +181,13 @@ class RegisterSellerServiceTest {
      */
     @Test
     void shouldRejectBlockedAdministrator() {
-        RegisterSellerService service = createService();
+        RegisterSellerService service =
+                createService();
 
         Administrator administrator =
-                createAdministrator(UserStatus.BLOCKED);
+                createAdministrator(
+                        UserStatus.BLOCKED
+                );
 
         assertThrows(
                 IllegalStateException.class,
@@ -142,17 +204,23 @@ class RegisterSellerServiceTest {
 
     /**
      * Verifica que la identificación del vendedor
-     * no pueda estar registrada previamente.
+     * sea única.
      */
     @Test
     void shouldRejectDuplicatedIdentification() {
-        InMemoryUserRepository repository =
+        InMemoryUserRepository userRepository =
                 new InMemoryUserRepository();
 
-        RegisterSellerService service =
-                new RegisterSellerService(repository);
+        InMemoryWarehouseRepository warehouseRepository =
+                new InMemoryWarehouseRepository();
 
-        repository.save(
+        RegisterSellerService service =
+                new RegisterSellerService(
+                        userRepository,
+                        warehouseRepository
+                );
+
+        userRepository.save(
                 new Administrator(
                         "2001",
                         "Existing User",
@@ -164,7 +232,9 @@ class RegisterSellerServiceTest {
         assertThrows(
                 IllegalStateException.class,
                 () -> service.register(
-                        createAdministrator(UserStatus.ACTIVE),
+                        createAdministrator(
+                                UserStatus.ACTIVE
+                        ),
                         "2001",
                         "Test Seller",
                         "seller@email.com",
@@ -173,22 +243,37 @@ class RegisterSellerServiceTest {
                 )
         );
 
-        assertEquals(1, repository.findAll().size());
+        assertEquals(
+                1,
+                userRepository.findAll().size()
+        );
+
+        assertTrue(
+                warehouseRepository
+                        .findAll()
+                        .isEmpty()
+        );
     }
 
     /**
-     * Verifica que el correo electrónico del vendedor
-     * no pueda estar registrado previamente.
+     * Verifica que el correo electrónico
+     * sea único.
      */
     @Test
     void shouldRejectDuplicatedEmail() {
-        InMemoryUserRepository repository =
+        InMemoryUserRepository userRepository =
                 new InMemoryUserRepository();
 
-        RegisterSellerService service =
-                new RegisterSellerService(repository);
+        InMemoryWarehouseRepository warehouseRepository =
+                new InMemoryWarehouseRepository();
 
-        repository.save(
+        RegisterSellerService service =
+                new RegisterSellerService(
+                        userRepository,
+                        warehouseRepository
+                );
+
+        userRepository.save(
                 new Administrator(
                         "5001",
                         "Existing User",
@@ -200,7 +285,9 @@ class RegisterSellerServiceTest {
         assertThrows(
                 IllegalStateException.class,
                 () -> service.register(
-                        createAdministrator(UserStatus.ACTIVE),
+                        createAdministrator(
+                                UserStatus.ACTIVE
+                        ),
                         "2001",
                         "Test Seller",
                         "seller@email.com",
@@ -209,16 +296,26 @@ class RegisterSellerServiceTest {
                 )
         );
 
-        assertEquals(1, repository.findAll().size());
+        assertEquals(
+                1,
+                userRepository.findAll().size()
+        );
+
+        assertTrue(
+                warehouseRepository
+                        .findAll()
+                        .isEmpty()
+        );
     }
 
     /**
-     * Verifica que un vendedor solamente pueda registrarse
-     * con una bodega perteneciente a vendedores.
+     * Verifica que un vendedor solamente pueda
+     * registrarse con una bodega de vendedor.
      */
     @Test
     void shouldRejectMarketplaceWarehouse() {
-        RegisterSellerService service = createService();
+        RegisterSellerService service =
+                createService();
 
         Warehouse marketplaceWarehouse =
                 new Warehouse(
@@ -228,7 +325,9 @@ class RegisterSellerServiceTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.register(
-                        createAdministrator(UserStatus.ACTIVE),
+                        createAdministrator(
+                                UserStatus.ACTIVE
+                        ),
                         "2001",
                         "Test Seller",
                         "seller@email.com",
@@ -239,17 +338,16 @@ class RegisterSellerServiceTest {
     }
 
     /**
-     * Crea el servicio con un repositorio en memoria.
+     * Crea el servicio con sus repositorios
+     * en memoria.
      */
     private RegisterSellerService createService() {
         return new RegisterSellerService(
-                new InMemoryUserRepository()
+                new InMemoryUserRepository(),
+                new InMemoryWarehouseRepository()
         );
     }
 
-    /**
-     * Crea un administrador con el estado indicado.
-     */
     private Administrator createAdministrator(
             UserStatus status
     ) {
@@ -261,9 +359,6 @@ class RegisterSellerServiceTest {
         );
     }
 
-    /**
-     * Crea una bodega perteneciente a un vendedor.
-     */
     private Warehouse createSellerWarehouse() {
         return new Warehouse(
                 WarehouseOwnerType.SELLER
@@ -271,7 +366,7 @@ class RegisterSellerServiceTest {
     }
 
     /**
-     * Repositorio de usuarios utilizado durante las pruebas.
+     * Repositorio de usuarios para las pruebas.
      */
     private static class InMemoryUserRepository
             implements UserRepository {
@@ -283,41 +378,34 @@ class RegisterSellerServiceTest {
         public boolean existsByIdentification(
                 String identification
         ) {
-            for (User user : users) {
-                if (user.getIdentification().equals(
-                        identification
-                )) {
-                    return true;
-                }
-            }
-
-            return false;
+            return users.stream()
+                    .anyMatch(user ->
+                            user.getIdentification()
+                                    .equals(identification)
+                    );
         }
 
         @Override
-        public boolean existsByEmail(String email) {
-            for (User user : users) {
-                if (user.getEmail().equals(email)) {
-                    return true;
-                }
-            }
-
-            return false;
+        public boolean existsByEmail(
+                String email
+        ) {
+            return users.stream()
+                    .anyMatch(user ->
+                            user.getEmail()
+                                    .equals(email)
+                    );
         }
 
         @Override
         public Optional<User> findByIdentification(
                 String identification
         ) {
-            for (User user : users) {
-                if (user.getIdentification().equals(
-                        identification
-                )) {
-                    return Optional.of(user);
-                }
-            }
-
-            return Optional.empty();
+            return users.stream()
+                    .filter(user ->
+                            user.getIdentification()
+                                    .equals(identification)
+                    )
+                    .findFirst();
         }
 
         @Override
@@ -326,12 +414,57 @@ class RegisterSellerServiceTest {
         }
 
         @Override
-        public void save(User user) {
+        public void save(
+                User user
+        ) {
             users.add(user);
         }
 
-        boolean contains(User user) {
+        boolean contains(
+                User user
+        ) {
             return users.contains(user);
+        }
+    }
+
+    /**
+     * Repositorio de bodegas para las pruebas.
+     */
+    private static class InMemoryWarehouseRepository
+            implements WarehouseRepository {
+
+        private final List<Warehouse> warehouses =
+                new ArrayList<>();
+
+        @Override
+        public void save(
+                Warehouse warehouse
+        ) {
+            warehouses.add(warehouse);
+        }
+
+        @Override
+        public boolean exists(
+                Warehouse warehouse
+        ) {
+            return warehouses.contains(warehouse);
+        }
+
+        @Override
+        public Optional<Warehouse> findById(
+                String warehouseId
+        ) {
+            return warehouses.stream()
+                    .filter(warehouse ->
+                            warehouse.getWarehouseId()
+                                    .equals(warehouseId)
+                    )
+                    .findFirst();
+        }
+
+        @Override
+        public List<Warehouse> findAll() {
+            return List.copyOf(warehouses);
         }
     }
 }

@@ -3,62 +3,40 @@ package application.domain.models;
 import application.domain.valueobjects.InventoryMovementType;
 import application.domain.valueobjects.SystemRole;
 
+import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
+
 /**
- * Representa el registro de un movimiento realizado sobre un inventario.
+ * Representa el registro histórico de una operación
+ * realizada sobre un inventario.
  *
- * Un movimiento indica el inventario afectado, el tipo de operación,
- * la cantidad involucrada y el usuario responsable de realizarla.
+ * Un movimiento registra el inventario afectado, el tipo,
+ * la cantidad, el usuario responsable y el momento exacto
+ * en el que ocurrió.
  *
- * Solamente un vendedor o un operador logístico activo puede registrar
- * movimientos de inventario.
- *
- * Esta clase conserva la información del movimiento, pero no modifica
- * directamente las existencias del objeto {@link Inventory}.
+ * Los movimientos serán almacenados en MongoDB como
+ * información de auditoría y trazabilidad.
  */
 public class InventoryMovement {
 
-    /**
-     * Inventario al que pertenece el movimiento.
-     */
+    private final String movementId;
     private final Inventory inventory;
-
-    /**
-     * Tipo de movimiento realizado sobre el inventario.
-     */
     private final InventoryMovementType movementType;
-
-    /**
-     * Cantidad de unidades involucradas en el movimiento.
-     *
-     * Siempre debe ser mayor que cero.
-     */
     private final int quantity;
-
-    /**
-     * Usuario responsable de realizar el movimiento.
-     */
     private final User performedBy;
+    private final Instant occurredAt;
 
     /**
-     * Crea el registro de un movimiento de inventario.
+     * Crea un movimiento nuevo.
      *
-     * Antes de crear el movimiento se valida que el inventario y el tipo
-     * de movimiento existan, que la cantidad sea válida y que el usuario
-     * tenga autorización para gestionar el inventario.
+     * En una operación nueva, el usuario debe encontrarse
+     * activo y tener autorización para administrar inventario.
      *
-     * @param inventory inventario asociado al movimiento
-     * @param movementType tipo de movimiento realizado
-     * @param quantity cantidad de unidades involucradas
-     * @param performedBy usuario que realizó el movimiento
-     *
-     * @throws IllegalArgumentException si el inventario es nulo
-     * @throws IllegalArgumentException si el tipo de movimiento es nulo
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
-     * @throws IllegalArgumentException si el usuario es nulo
-     * @throws IllegalStateException si el usuario no está activo
-     * @throws IllegalStateException si el usuario no tiene un rol
-     *                               autorizado para gestionar inventario
+     * @param inventory inventario afectado
+     * @param movementType tipo de movimiento
+     * @param quantity cantidad involucrada
+     * @param performedBy usuario responsable
      */
     public InventoryMovement(
             Inventory inventory,
@@ -66,75 +44,137 @@ public class InventoryMovement {
             int quantity,
             User performedBy
     ) {
+        this(
+                UUID.randomUUID().toString(),
+                inventory,
+                movementType,
+                quantity,
+                performedBy,
+                Instant.now(),
+                true
+        );
+    }
+
+    /**
+     * Reconstruye un movimiento histórico almacenado.
+     *
+     * No vuelve a exigir que el usuario continúe activo,
+     * porque bloquearlo posteriormente no debe impedir
+     * consultar las operaciones que realizó anteriormente.
+     *
+     * @param movementId identificador del movimiento
+     * @param inventory inventario relacionado
+     * @param movementType tipo de movimiento
+     * @param quantity cantidad involucrada
+     * @param performedBy usuario que realizó la operación
+     * @param occurredAt fecha y hora de la operación
+     */
+    public InventoryMovement(
+            String movementId,
+            Inventory inventory,
+            InventoryMovementType movementType,
+            int quantity,
+            User performedBy,
+            Instant occurredAt
+    ) {
+        this(
+                movementId,
+                inventory,
+                movementType,
+                quantity,
+                performedBy,
+                occurredAt,
+                false
+        );
+    }
+
+    /**
+     * Constructor central para movimientos
+     * nuevos e históricos.
+     *
+     * @param requireCurrentAuthorization indica si debe
+     *                                    verificarse la autorización actual
+     */
+    private InventoryMovement(
+            String movementId,
+            Inventory inventory,
+            InventoryMovementType movementType,
+            int quantity,
+            User performedBy,
+            Instant occurredAt,
+            boolean requireCurrentAuthorization
+    ) {
+        validateMovementId(movementId);
         validateInventory(inventory);
         validateMovementType(movementType);
         validateQuantity(quantity);
-        validateAuthorizedUser(performedBy);
+        validateUser(performedBy);
+        validateOccurredAt(occurredAt);
 
+        if (requireCurrentAuthorization) {
+            validateAuthorizedUser(performedBy);
+        }
+
+        this.movementId = movementId;
         this.inventory = inventory;
         this.movementType = movementType;
         this.quantity = quantity;
         this.performedBy = performedBy;
+        this.occurredAt = occurredAt;
     }
 
-    /**
-     * Obtiene el inventario asociado al movimiento.
-     *
-     * @return el inventario relacionado
-     */
+    public String getMovementId() {
+        return movementId;
+    }
+
     public Inventory getInventory() {
         return inventory;
     }
 
-    /**
-     * Obtiene el tipo de movimiento registrado.
-     *
-     * @return el tipo de movimiento de inventario
-     */
     public InventoryMovementType getMovementType() {
         return movementType;
     }
 
-    /**
-     * Obtiene la cantidad de unidades involucradas.
-     *
-     * @return la cantidad del movimiento
-     */
     public int getQuantity() {
         return quantity;
     }
 
-    /**
-     * Obtiene el usuario que realizó el movimiento.
-     *
-     * @return el usuario responsable
-     */
     public User getPerformedBy() {
         return performedBy;
     }
 
-    /**
-     * Determina si el movimiento pertenece al inventario recibido.
-     *
-     * La comparación se realiza por identidad, por lo que las referencias
-     * deben apuntar a la misma instancia de {@link Inventory}.
-     *
-     * @param inventory inventario que se desea comparar
-     * @return {@code true} si corresponde a la misma instancia;
-     *         de lo contrario, {@code false}
-     */
-    public boolean belongsTo(Inventory inventory) {
-        return this.inventory == inventory;
+    public Instant getOccurredAt() {
+        return occurredAt;
     }
 
     /**
-     * Valida que el movimiento esté relacionado con un inventario.
+     * Comprueba si el movimiento pertenece
+     * al inventario indicado.
      *
-     * @param inventory inventario que se desea validar
-     *
-     * @throws IllegalArgumentException si el inventario es nulo
+     * @param inventory inventario consultado
+     * @return true si tiene el mismo inventoryId
      */
-    private void validateInventory(Inventory inventory) {
+    public boolean belongsTo(
+            Inventory inventory
+    ) {
+        return this.inventory
+                .isSameInventory(inventory);
+    }
+
+    private void validateMovementId(
+            String movementId
+    ) {
+        if (movementId == null
+                || movementId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Inventory movement identifier must not be empty."
+            );
+        }
+    }
+
+    private void validateInventory(
+            Inventory inventory
+    ) {
         if (inventory == null) {
             throw new IllegalArgumentException(
                     "Inventory movement must reference inventory."
@@ -142,13 +182,6 @@ public class InventoryMovement {
         }
     }
 
-    /**
-     * Valida que el movimiento tenga un tipo definido.
-     *
-     * @param movementType tipo de movimiento que se desea validar
-     *
-     * @throws IllegalArgumentException si el tipo de movimiento es nulo
-     */
     private void validateMovementType(
             InventoryMovementType movementType
     ) {
@@ -159,14 +192,6 @@ public class InventoryMovement {
         }
     }
 
-    /**
-     * Valida que la cantidad del movimiento sea mayor que cero.
-     *
-     * @param quantity cantidad que se desea validar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
-     */
     private void validateQuantity(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException(
@@ -175,26 +200,21 @@ public class InventoryMovement {
         }
     }
 
-    /**
-     * Valida que el usuario pueda gestionar movimientos de inventario.
-     *
-     * El usuario debe existir, estar activo y tener el rol de vendedor
-     * o de operador logístico.
-     *
-     * @param user usuario que se desea validar
-     *
-     * @throws IllegalArgumentException si el usuario es nulo
-     * @throws IllegalStateException si el usuario no está activo
-     * @throws IllegalStateException si su rol no es vendedor ni
-     *                               operador logístico
-     */
-    private void validateAuthorizedUser(User user) {
+    private void validateUser(User user) {
         if (user == null) {
             throw new IllegalArgumentException(
                     "Inventory movement must be performed by a user."
             );
         }
+    }
 
+    /**
+     * Verifica la autorización para registrar
+     * un movimiento nuevo.
+     *
+     * @param user usuario que ejecuta la operación
+     */
+    private void validateAuthorizedUser(User user) {
         if (!user.isActive()) {
             throw new IllegalStateException(
                     "Only active users can manage inventory."
@@ -205,12 +225,44 @@ public class InventoryMovement {
                 user.getRole() == SystemRole.SELLER;
 
         boolean isLogisticsOperator =
-                user.getRole() == SystemRole.LOGISTICS_OPERATOR;
+                user.getRole()
+                        == SystemRole.LOGISTICS_OPERATOR;
 
         if (!isSeller && !isLogisticsOperator) {
             throw new IllegalStateException(
                     "User is not authorized to manage inventory."
             );
         }
+    }
+
+    private void validateOccurredAt(
+            Instant occurredAt
+    ) {
+        if (occurredAt == null) {
+            throw new IllegalArgumentException(
+                    "Inventory movement occurrence date must not be null."
+            );
+        }
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object
+                instanceof InventoryMovement movement)) {
+            return false;
+        }
+
+        return movementId.equals(
+                movement.movementId
+        );
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(movementId);
     }
 }

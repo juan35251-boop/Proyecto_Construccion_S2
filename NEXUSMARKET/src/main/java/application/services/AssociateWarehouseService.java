@@ -2,22 +2,15 @@ package application.services;
 
 import application.domain.models.Administrator;
 import application.domain.models.Seller;
+import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.ports.input.AssociateWarehouseUseCase;
 import application.ports.output.UserRepository;
 import application.ports.output.WarehouseRepository;
 
 /**
- * Servicio de aplicación encargado de asociar una bodega
+ * Servicio encargado de asociar una bodega
  * previamente registrada con un vendedor.
- *
- * Implementa el puerto de entrada AssociateWarehouseUseCase,
- * permitiendo realizar la asociación sin depender
- * directamente de esta implementación.
- *
- * Solamente los administradores activos pueden realizar
- * esta operación. Además, el vendedor únicamente puede
- * recibir bodegas clasificadas como bodegas de vendedor.
  */
 public class AssociateWarehouseService
         implements AssociateWarehouseUseCase {
@@ -25,14 +18,6 @@ public class AssociateWarehouseService
     private final UserRepository userRepository;
     private final WarehouseRepository warehouseRepository;
 
-    /**
-     * Construye el servicio con sus repositorios.
-     *
-     * @param userRepository repositorio utilizado
-     *                       para guardar al vendedor
-     * @param warehouseRepository repositorio utilizado
-     *                            para comprobar la bodega
-     */
     public AssociateWarehouseService(
             UserRepository userRepository,
             WarehouseRepository warehouseRepository
@@ -47,11 +32,7 @@ public class AssociateWarehouseService
     }
 
     /**
-     * Asocia una bodega registrada con un vendedor.
-     *
-     * @param associatedBy administrador que realiza la asociación
-     * @param seller vendedor que administrará la bodega
-     * @param warehouse bodega que será asociada
+     * Asocia los objetos de dominio recibidos.
      */
     @Override
     public void associate(
@@ -69,26 +50,86 @@ public class AssociateWarehouseService
                 warehouse
         );
 
-        /*
-         * Seller comprueba que la bodega sea realmente
-         * una bodega perteneciente a la categoría SELLER.
-         */
         seller.associateWarehouse(warehouse);
-
-        /*
-         * La asociación forma parte de la información
-         * del vendedor. Por eso se guarda nuevamente
-         * el vendedor actualizado.
-         */
         userRepository.save(seller);
     }
 
     /**
-     * Valida que los repositorios requeridos existan.
-     *
-     * @param userRepository repositorio de usuarios
-     * @param warehouseRepository repositorio de bodegas
+     * Localiza al administrador, vendedor y bodega
+     * antes de realizar la asociación.
      */
+    @Override
+    public void associate(
+            String administratorIdentification,
+            String sellerIdentification,
+            String warehouseId
+    ) {
+        validateIdentifier(
+                administratorIdentification,
+                "Administrator identification"
+        );
+
+        validateIdentifier(
+                sellerIdentification,
+                "Seller identification"
+        );
+
+        validateIdentifier(
+                warehouseId,
+                "Warehouse identifier"
+        );
+
+        User administratorUser =
+                userRepository
+                        .findByIdentification(
+                                administratorIdentification
+                        )
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Administrator was not found."
+                                )
+                        );
+
+        if (!(administratorUser
+                instanceof Administrator administrator)) {
+            throw new IllegalStateException(
+                    "Only an administrator can associate warehouses."
+            );
+        }
+
+        User sellerUser =
+                userRepository
+                        .findByIdentification(
+                                sellerIdentification
+                        )
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Seller was not found."
+                                )
+                        );
+
+        if (!(sellerUser instanceof Seller seller)) {
+            throw new IllegalStateException(
+                    "Warehouse owner must be a seller."
+            );
+        }
+
+        Warehouse warehouse =
+                warehouseRepository
+                        .findById(warehouseId)
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Warehouse was not found."
+                                )
+                        );
+
+        associate(
+                administrator,
+                seller,
+                warehouse
+        );
+    }
+
     private void validateRepositories(
             UserRepository userRepository,
             WarehouseRepository warehouseRepository
@@ -106,12 +147,6 @@ public class AssociateWarehouseService
         }
     }
 
-    /**
-     * Valida que la asociación sea realizada por
-     * un administrador activo.
-     *
-     * @param administrator administrador responsable
-     */
     private void validateAdministrator(
             Administrator administrator
     ) {
@@ -128,16 +163,9 @@ public class AssociateWarehouseService
         }
     }
 
-    /**
-     * Valida que el vendedor exista.
-     *
-     * No se exige que el vendedor esté activo porque
-     * el administrador puede preparar su información
-     * antes de habilitarlo comercialmente.
-     *
-     * @param seller vendedor que recibirá la bodega
-     */
-    private void validateSeller(Seller seller) {
+    private void validateSeller(
+            Seller seller
+    ) {
         if (seller == null) {
             throw new IllegalArgumentException(
                     "Seller must not be null."
@@ -145,25 +173,22 @@ public class AssociateWarehouseService
         }
     }
 
-    /**
-     * Valida que la bodega exista.
-     *
-     * @param warehouse bodega que será asociada
-     */
-    private void validateWarehouse(Warehouse warehouse) {
+    private void validateWarehouse(
+            Warehouse warehouse
+    ) {
         if (warehouse == null) {
             throw new IllegalArgumentException(
                     "Warehouse must not be null."
             );
         }
+
+        if (!warehouse.isSellerWarehouse()) {
+            throw new IllegalArgumentException(
+                    "A seller can only receive seller warehouses."
+            );
+        }
     }
 
-    /**
-     * Impide asociar una bodega que todavía
-     * no haya sido registrada.
-     *
-     * @param warehouse bodega que será validada
-     */
     private void validateRegisteredWarehouse(
             Warehouse warehouse
     ) {
@@ -174,12 +199,6 @@ public class AssociateWarehouseService
         }
     }
 
-    /**
-     * Impide registrar dos veces la misma relación.
-     *
-     * @param seller vendedor administrado
-     * @param warehouse bodega que será asociada
-     */
     private void validateNotAlreadyAssociated(
             Seller seller,
             Warehouse warehouse
@@ -187,6 +206,18 @@ public class AssociateWarehouseService
         if (seller.managesWarehouse(warehouse)) {
             throw new IllegalStateException(
                     "Warehouse is already associated with this seller."
+            );
+        }
+    }
+
+    private void validateIdentifier(
+            String identifier,
+            String fieldName
+    ) {
+        if (identifier == null
+                || identifier.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
             );
         }
     }

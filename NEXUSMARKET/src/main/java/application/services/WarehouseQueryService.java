@@ -5,6 +5,7 @@ import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.WarehouseQueryUseCase;
+import application.ports.output.UserRepository;
 import application.ports.output.WarehouseRepository;
 
 import java.util.List;
@@ -12,9 +13,8 @@ import java.util.List;
 /**
  * Servicio de aplicación encargado de consultar bodegas.
  *
- * Implementa el puerto de entrada WarehouseQueryUseCase,
- * permitiendo consultar bodegas sin depender directamente
- * de esta implementación.
+ * Recibe la identificación del solicitante y obtiene
+ * al usuario mediante UserRepository.
  *
  * Permisos aplicados:
  *
@@ -22,67 +22,73 @@ import java.util.List;
  * - Supervisor: consulta todas las bodegas.
  * - Vendedor: consulta sus propias bodegas.
  * - Operador logístico: consulta bodegas del Marketplace.
- * - Comprador: no tiene acceso a las bodegas.
+ * - Comprador: no tiene acceso.
  */
 public class WarehouseQueryService
         implements WarehouseQueryUseCase {
 
+    private final UserRepository userRepository;
     private final WarehouseRepository warehouseRepository;
 
     /**
-     * Construye el servicio con el repositorio de bodegas.
+     * Construye el servicio con los repositorios requeridos.
      *
-     * @param warehouseRepository repositorio utilizado
-     *                            en las consultas
+     * @param userRepository repositorio de usuarios
+     * @param warehouseRepository repositorio de bodegas
      */
     public WarehouseQueryService(
+            UserRepository userRepository,
             WarehouseRepository warehouseRepository
     ) {
-        if (warehouseRepository == null) {
-            throw new IllegalArgumentException(
-                    "Warehouse repository must not be null."
-            );
-        }
+        validateRepositories(
+                userRepository,
+                warehouseRepository
+        );
 
-        this.warehouseRepository =
-                warehouseRepository;
+        this.userRepository = userRepository;
+        this.warehouseRepository = warehouseRepository;
     }
 
     /**
      * Obtiene las bodegas visibles para el usuario.
      *
-     * @param requestedBy usuario que realiza la consulta
+     * @param requesterIdentification identificación
+     *        del usuario que realiza la consulta
      * @return lista de bodegas autorizadas
      */
     @Override
     public List<Warehouse> findAccessibleWarehouses(
-            User requestedBy
+            String requesterIdentification
     ) {
-        validateActiveRequester(requestedBy);
+        User requester = findRequester(
+                requesterIdentification
+        );
+
+        validateActiveRequester(requester);
 
         /*
          * Administradores y supervisores pueden
          * consultar todas las bodegas registradas.
          */
-        if (hasGlobalAccess(requestedBy)) {
+        if (hasGlobalAccess(requester)) {
             return List.copyOf(
                     warehouseRepository.findAll()
             );
         }
 
         /*
-         * El vendedor consulta las bodegas
-         * que tiene asociadas.
+         * El vendedor consulta únicamente
+         * las bodegas que tiene asociadas.
          */
-        if (requestedBy instanceof Seller seller) {
+        if (requester instanceof Seller seller) {
             return seller.getWarehouses();
         }
 
         /*
-         * El operador logístico solamente puede consultar
+         * El operador logístico solamente consulta
          * bodegas pertenecientes al Marketplace.
          */
-        if (requestedBy.getRole()
+        if (requester.getRole()
                 == SystemRole.LOGISTICS_OPERATOR) {
             return warehouseRepository.findAll()
                     .stream()
@@ -92,31 +98,60 @@ public class WarehouseQueryService
                     .toList();
         }
 
-        /*
-         * Los compradores y los demás roles
-         * no tienen autorización.
-         */
         throw new IllegalStateException(
                 "User is not authorized to query warehouses."
         );
     }
 
     /**
-     * Valida que el usuario exista
-     * y tenga un estado activo.
-     *
-     * @param requestedBy usuario que realiza la consulta
+     * Valida que existan los repositorios requeridos.
      */
-    private void validateActiveRequester(
-            User requestedBy
+    private void validateRepositories(
+            UserRepository userRepository,
+            WarehouseRepository warehouseRepository
     ) {
-        if (requestedBy == null) {
+        if (userRepository == null) {
             throw new IllegalArgumentException(
-                    "Requesting user must not be null."
+                    "User repository must not be null."
             );
         }
 
-        if (!requestedBy.isActive()) {
+        if (warehouseRepository == null) {
+            throw new IllegalArgumentException(
+                    "Warehouse repository must not be null."
+            );
+        }
+    }
+
+    /**
+     * Busca al usuario que realiza la consulta.
+     */
+    private User findRequester(
+            String identification
+    ) {
+        if (identification == null
+                || identification.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Requester identification must not be empty."
+            );
+        }
+
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
+    }
+
+    /**
+     * Comprueba que el usuario se encuentre activo.
+     */
+    private void validateActiveRequester(
+            User requester
+    ) {
+        if (!requester.isActive()) {
             throw new IllegalStateException(
                     "Only active users can query warehouses."
             );
@@ -126,9 +161,6 @@ public class WarehouseQueryService
     /**
      * Indica si el usuario puede consultar
      * todas las bodegas.
-     *
-     * @param user usuario que realiza la consulta
-     * @return true si es administrador o supervisor
      */
     private boolean hasGlobalAccess(User user) {
         return user.getRole()

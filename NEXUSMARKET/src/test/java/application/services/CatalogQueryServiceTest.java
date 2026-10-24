@@ -1,19 +1,18 @@
 package application.services;
 
 import application.domain.models.Administrator;
-import application.domain.models.Buyer;
 import application.domain.models.LogisticsOperator;
 import application.domain.models.Product;
 import application.domain.models.Seller;
 import application.domain.models.Supervisor;
 import application.domain.models.Warehouse;
-import application.domain.valueobjects.BuyerStatus;
 import application.domain.valueobjects.ProductStatus;
 import application.domain.valueobjects.ProductType;
 import application.domain.valueobjects.UserStatus;
 import application.domain.valueobjects.WarehouseOwnerType;
 import application.services.support.InMemoryProductQueryRepository;
-import org.junit.jupiter.api.DisplayName;
+import application.services.support.InMemoryUserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,231 +21,259 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Pruebas del servicio encargado de consultar el catálogo.
- */
 class CatalogQueryServiceTest {
 
-    @Test
-    @DisplayName("El administrador puede consultar todo el catálogo")
-    void administratorShouldFindAllProducts() {
-        InMemoryProductQueryRepository repository =
-                createRepository();
+    private InMemoryUserRepository userRepository;
+    private InMemoryProductQueryRepository
+            productRepository;
+    private CatalogQueryService service;
 
-        CatalogQueryService service =
-                new CatalogQueryService(repository);
+    @BeforeEach
+    void setUp() {
+        userRepository =
+                new InMemoryUserRepository();
 
-        List<Product> products =
-                service.findAccessibleProducts(
-                        createAdministrator()
-                );
-
-        assertEquals(3, products.size());
-    }
-
-    @Test
-    @DisplayName("El supervisor puede consultar todo el catálogo")
-    void supervisorShouldFindAllProducts() {
-        CatalogQueryService service =
-                new CatalogQueryService(
-                        createRepository()
-                );
-
-        List<Product> products =
-                service.findAccessibleProducts(
-                        createSupervisor()
-                );
-
-        assertEquals(3, products.size());
-    }
-
-    @Test
-    @DisplayName("El comprador solamente consulta productos publicados")
-    void buyerShouldOnlyFindPublishedProducts() {
-        CatalogQueryService service =
-                new CatalogQueryService(
-                        createRepository()
-                );
-
-        List<Product> products =
-                service.findAccessibleProducts(
-                        createBuyer(UserStatus.ACTIVE)
-                );
-
-        assertEquals(1, products.size());
-        assertTrue(products.get(0).isPublished());
-    }
-
-    @Test
-    @DisplayName("El operador solamente consulta productos publicados")
-    void logisticsOperatorShouldOnlyFindPublishedProducts() {
-        CatalogQueryService service =
-                new CatalogQueryService(
-                        createRepository()
-                );
-
-        List<Product> products =
-                service.findAccessibleProducts(
-                        createLogisticsOperator(
-                                UserStatus.ACTIVE
-                        )
-                );
-
-        assertEquals(1, products.size());
-        assertTrue(products.get(0).isPublished());
-    }
-
-    @Test
-    @DisplayName("El vendedor solamente consulta sus productos")
-    void sellerShouldOnlyFindOwnProducts() {
-        InMemoryProductQueryRepository repository =
+        productRepository =
                 new InMemoryProductQueryRepository();
 
-        Product ownProduct = new Product(
-                ProductType.PHYSICAL,
-                ProductStatus.SUSPENDED
-        );
-
-        Product otherProduct = new Product(
-                ProductType.DIGITAL,
-                ProductStatus.PUBLISHED
-        );
-
-        repository.add(ownProduct);
-        repository.add(otherProduct);
-
-        Seller seller = createSeller(
-                UserStatus.ACTIVE
-        );
-
-        seller.registerProduct(ownProduct);
-
-        CatalogQueryService service =
-                new CatalogQueryService(repository);
-
-        List<Product> products =
-                service.findAccessibleProducts(seller);
-
-        assertEquals(1, products.size());
-        assertTrue(products.contains(ownProduct));
+        service =
+                new CatalogQueryService(
+                        userRepository,
+                        productRepository
+                );
     }
 
     @Test
-    @DisplayName("Debe rechazar un usuario inactivo")
-    void shouldRejectInactiveUser() {
-        CatalogQueryService service =
-                new CatalogQueryService(
-                        createRepository()
+    void shouldAllowAdministratorToSeeAllProducts() {
+        Administrator administrator =
+                new Administrator(
+                        "ADMIN-001",
+                        "Administrator",
+                        "admin@nexusmarket.com",
+                        UserStatus.ACTIVE
                 );
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> service.findAccessibleProducts(
-                        createBuyer(UserStatus.INACTIVE)
+        userRepository.save(administrator);
+        addCatalogProducts();
+
+        List<Product> result =
+                service.findAccessibleProducts(
+                        "ADMIN-001"
+                );
+
+        assertEquals(3, result.size());
+    }
+
+    @Test
+    void shouldAllowSupervisorToSeeAllProducts() {
+        Supervisor supervisor =
+                new Supervisor(
+                        "SUPERVISOR-001",
+                        "Supervisor",
+                        "supervisor@nexusmarket.com",
+                        UserStatus.ACTIVE
+                );
+
+        userRepository.save(supervisor);
+        addCatalogProducts();
+
+        List<Product> result =
+                service.findAccessibleProducts(
+                        "SUPERVISOR-001"
+                );
+
+        assertEquals(3, result.size());
+    }
+
+    @Test
+    void shouldAllowSellerToSeeOnlyOwnProducts() {
+        Seller seller =
+                createSeller(
+                        "SELLER-001",
+                        UserStatus.ACTIVE
+                );
+
+        userRepository.save(seller);
+        addCatalogProducts();
+
+        List<Product> result =
+                service.findAccessibleProducts(
+                        "SELLER-001"
+                );
+
+        assertEquals(2, result.size());
+
+        assertTrue(
+                result.stream().allMatch(
+                        product ->
+                                product.belongsToSeller(
+                                        "SELLER-001"
+                                )
                 )
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar un usuario nulo")
-    void shouldRejectNullUser() {
-        CatalogQueryService service =
-                new CatalogQueryService(
-                        createRepository()
+    void shouldAllowLogisticsOperatorToSeePublishedProducts() {
+        LogisticsOperator operator =
+                new LogisticsOperator(
+                        "OPERATOR-001",
+                        "Logistics Operator",
+                        "operator@nexusmarket.com",
+                        UserStatus.ACTIVE
                 );
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> service.findAccessibleProducts(null)
+        userRepository.save(operator);
+        addCatalogProducts();
+
+        List<Product> result =
+                service.findAccessibleProducts(
+                        "OPERATOR-001"
+                );
+
+        assertEquals(2, result.size());
+
+        assertTrue(
+                result.stream()
+                        .allMatch(Product::isPublished)
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar un repositorio nulo")
-    void shouldRejectNullRepository() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new CatalogQueryService(null)
+    void shouldRejectInactiveRequester() {
+        Supervisor supervisor =
+                new Supervisor(
+                        "SUPERVISOR-001",
+                        "Supervisor",
+                        "supervisor@nexusmarket.com",
+                        UserStatus.INACTIVE
+                );
+
+        userRepository.save(supervisor);
+
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                service.findAccessibleProducts(
+                                        "SUPERVISOR-001"
+                                )
+                );
+
+        assertEquals(
+                "Only active users can query the catalog.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Crea un repositorio con productos en distintos estados.
-     */
-    private InMemoryProductQueryRepository
-            createRepository() {
-        InMemoryProductQueryRepository repository =
-                new InMemoryProductQueryRepository();
+    @Test
+    void shouldRejectUnknownRequester() {
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                service.findAccessibleProducts(
+                                        "UNKNOWN"
+                                )
+                );
 
-        repository.add(
+        assertEquals(
+                "Requesting user was not found.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectBlankRequesterIdentification() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                service.findAccessibleProducts(
+                                        " "
+                                )
+                );
+
+        assertEquals(
+                "Requester identification must not be empty.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectNullUserRepository() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new CatalogQueryService(
+                                        null,
+                                        productRepository
+                                )
+                );
+
+        assertEquals(
+                "User repository must not be null.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectNullProductQueryRepository() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new CatalogQueryService(
+                                        userRepository,
+                                        null
+                                )
+                );
+
+        assertEquals(
+                "Product query repository must not be null.",
+                exception.getMessage()
+        );
+    }
+
+    private void addCatalogProducts() {
+        productRepository.add(
                 new Product(
+                        "PRODUCT-001",
+                        "SELLER-001",
                         ProductType.PHYSICAL,
                         ProductStatus.PUBLISHED
                 )
         );
 
-        repository.add(
+        productRepository.add(
                 new Product(
+                        "PRODUCT-002",
+                        "SELLER-001",
                         ProductType.DIGITAL,
                         ProductStatus.SUSPENDED
                 )
         );
 
-        repository.add(
+        productRepository.add(
                 new Product(
-                        ProductType.PHYSICAL,
-                        ProductStatus.DISCONTINUED
+                        "PRODUCT-003",
+                        "SELLER-002",
+                        ProductType.DIGITAL,
+                        ProductStatus.PUBLISHED
                 )
         );
-
-        return repository;
     }
 
-    private Administrator createAdministrator() {
-        return new Administrator(
-                "9001",
-                "Administrator",
-                "admin@email.com",
-                UserStatus.ACTIVE
-        );
-    }
-
-    private Supervisor createSupervisor() {
-        return new Supervisor(
-                "8001",
-                "Supervisor",
-                "supervisor@email.com",
-                UserStatus.ACTIVE
-        );
-    }
-
-    private Buyer createBuyer(UserStatus status) {
-        return new Buyer(
-                "1001",
-                "Buyer",
-                "buyer@email.com",
-                status,
-                "Main Street 10",
-                BuyerStatus.ACTIVE
-        );
-    }
-
-    private LogisticsOperator createLogisticsOperator(
+    private Seller createSeller(
+            String identification,
             UserStatus status
     ) {
-        return new LogisticsOperator(
-                "3001",
-                "Logistics Operator",
-                "operator@email.com",
-                status
-        );
-    }
-
-    private Seller createSeller(UserStatus status) {
         return new Seller(
-                "2001",
-                "Seller",
-                "seller@email.com",
+                identification,
+                "Nexus Seller",
+                identification.toLowerCase()
+                        + "@nexusmarket.com",
                 status,
                 new Warehouse(
                         WarehouseOwnerType.SELLER

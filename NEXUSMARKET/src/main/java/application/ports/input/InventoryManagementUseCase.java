@@ -9,14 +9,85 @@ import application.domain.valueobjects.InventoryCondition;
  * Puerto de entrada que define el caso de uso
  * para administrar el inventario de NexusMarket.
  *
- * Permite modificar las cantidades y condiciones
- * del inventario, conservando evidencia de los
- * movimientos realizados.
+ * Permite modificar cantidades y condiciones del inventario,
+ * conservando evidencia de los movimientos realizados.
  */
 public interface InventoryManagementUseCase {
 
     /**
+     * Registra el ingreso de unidades utilizando identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad que ingresa
+     * @return movimiento generado
+     */
+    InventoryMovement registerEntry(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    );
+
+    /**
+     * Reserva unidades utilizando identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad que se desea reservar
+     * @return movimiento generado
+     */
+    InventoryMovement reserveQuantity(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    );
+
+    /**
+     * Ajusta la cantidad disponible utilizando identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param newQuantity nueva cantidad disponible
+     * @return movimiento generado
+     */
+    InventoryMovement adjustQuantity(
+            String performedByIdentification,
+            String inventoryId,
+            int newQuantity
+    );
+
+    /**
+     * Registra una devolución utilizando identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad devuelta
+     * @return movimiento generado
+     */
+    InventoryMovement registerReturn(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    );
+
+    /**
+     * Cambia la condición del inventario utilizando identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param newCondition nueva condición
+     */
+    void changeCondition(
+            String performedByIdentification,
+            String inventoryId,
+            InventoryCondition newCondition
+    );
+
+    /**
      * Registra el ingreso de nuevas unidades.
+     *
+     * Este método se conserva para mantener compatibilidad
+     * con las pruebas y componentes existentes.
      *
      * @param performedBy usuario que realiza la operación
      * @param inventory inventario que recibe las unidades
@@ -44,7 +115,7 @@ public interface InventoryManagementUseCase {
     );
 
     /**
-     * Ajusta la cantidad disponible a un nuevo valor.
+     * Ajusta la cantidad disponible.
      *
      * @param performedBy usuario que realiza el ajuste
      * @param inventory inventario que será ajustado

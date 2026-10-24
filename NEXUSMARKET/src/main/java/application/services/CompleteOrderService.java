@@ -7,12 +7,10 @@ import application.ports.output.OrderRepository;
 /**
  * Servicio de aplicación encargado de finalizar pedidos.
  *
- * Implementa el puerto de entrada CompleteOrderUseCase,
- * permitiendo solicitar la finalización de una orden sin
- * depender directamente de esta implementación.
- *
  * La finalización representa el cierre satisfactorio
  * del pedido después de confirmar su entrega.
+ *
+ * Un pedido finalizado no puede volver a modificarse.
  */
 public class CompleteOrderService
         implements CompleteOrderUseCase {
@@ -20,10 +18,9 @@ public class CompleteOrderService
     private final OrderRepository orderRepository;
 
     /**
-     * Construye el servicio con el repositorio de pedidos.
+     * Construye el servicio.
      *
-     * @param orderRepository repositorio utilizado
-     *                        para guardar pedidos
+     * @param orderRepository repositorio de pedidos
      */
     public CompleteOrderService(
             OrderRepository orderRepository
@@ -33,10 +30,10 @@ public class CompleteOrderService
     }
 
     /**
-     * Finaliza un pedido que ya fue entregado.
+     * Finaliza un pedido entregado.
      *
-     * El modelo Order valida que solamente un pedido
-     * con estado DELIVERED pueda cambiar al estado FINALIZED.
+     * Order valida internamente que únicamente un pedido
+     * en estado DELIVERED pueda cambiar a FINALIZED.
      *
      * @param order pedido que se desea finalizar
      * @return pedido finalizado
@@ -45,27 +42,40 @@ public class CompleteOrderService
     public Order complete(Order order) {
         validateOrder(order);
 
-        /*
-         * Order protege su propio ciclo de vida
-         * y valida la transición:
-         *
-         * DELIVERED -> FINALIZED
-         */
         order.finalizeOrder();
 
-        /*
-         * Se almacena el nuevo estado del pedido
-         * mediante el puerto de salida.
-         */
         orderRepository.save(order);
 
         return order;
     }
 
     /**
-     * Valida que el repositorio exista.
+     * Localiza y finaliza un pedido
+     * mediante su identificador.
      *
-     * @param orderRepository repositorio de pedidos
+     * @param orderId identificador del pedido
+     * @return pedido finalizado
+     */
+    @Override
+    public Order completeByOrderId(String orderId) {
+        validateText(
+                orderId,
+                "Order identifier"
+        );
+
+        Order order = orderRepository
+                .findById(orderId)
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Order was not found."
+                        )
+                );
+
+        return complete(order);
+    }
+
+    /**
+     * Valida el repositorio.
      */
     private void validateRepository(
             OrderRepository orderRepository
@@ -78,14 +88,26 @@ public class CompleteOrderService
     }
 
     /**
-     * Valida que exista un pedido para finalizar.
-     *
-     * @param order pedido que será validado
+     * Valida que exista el pedido.
      */
     private void validateOrder(Order order) {
         if (order == null) {
             throw new IllegalArgumentException(
                     "Order must not be null."
+            );
+        }
+    }
+
+    /**
+     * Valida un identificador obligatorio.
+     */
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
             );
         }
     }

@@ -5,29 +5,19 @@ import application.domain.models.Order;
 import application.domain.models.Shipment;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para administrar los envíos de NexusMarket.
+ * Puerto de entrada para administrar envíos físicos.
  *
- * Permite crear, despachar y confirmar la entrega
- * de un envío físico.
- *
- * Estas operaciones solamente pueden ser realizadas
- * por un operador logístico activo.
+ * Únicamente un operador logístico activo puede crear,
+ * despachar o confirmar la entrega de un envío.
  */
 public interface ShipmentManagementUseCase {
 
     /**
-     * Crea un envío para un pedido físico pagado.
+     * Crea un envío utilizando objetos del dominio.
      *
-     * @param operator operador logístico responsable
-     * @param order pedido que será enviado
+     * @param operator operador logístico
+     * @param order pedido físico pagado
      * @return envío creado
-     *
-     * @throws IllegalArgumentException si el operador
-     *         o el pedido son nulos
-     * @throws IllegalStateException si el operador está
-     *         inactivo, el pedido no fue pagado o no
-     *         contiene productos físicos
      */
     Shipment createShipment(
             LogisticsOperator operator,
@@ -35,18 +25,10 @@ public interface ShipmentManagementUseCase {
     );
 
     /**
-     * Registra el despacho físico de un envío.
+     * Despacha un envío utilizando objetos del dominio.
      *
-     * La operación cambia el pedido asociado
-     * de PAID a DISPATCHED.
-     *
-     * @param operator operador logístico responsable
+     * @param operator operador logístico
      * @param shipment envío que será despachado
-     *
-     * @throws IllegalArgumentException si el operador
-     *         o el envío son nulos
-     * @throws IllegalStateException si el operador está
-     *         inactivo o el envío no puede despacharse
      */
     void dispatchShipment(
             LogisticsOperator operator,
@@ -54,21 +36,49 @@ public interface ShipmentManagementUseCase {
     );
 
     /**
-     * Confirma que el envío fue entregado.
+     * Confirma la entrega utilizando objetos del dominio.
      *
-     * La operación cambia el pedido asociado
-     * de DISPATCHED a DELIVERED.
-     *
-     * @param operator operador logístico responsable
-     * @param shipment envío cuya entrega se confirma
-     *
-     * @throws IllegalArgumentException si el operador
-     *         o el envío son nulos
-     * @throws IllegalStateException si el operador está
-     *         inactivo o el envío no fue despachado
+     * @param operator operador logístico
+     * @param shipment envío entregado
      */
     void confirmDelivery(
             LogisticsOperator operator,
             Shipment shipment
+    );
+
+    /**
+     * Crea un envío mediante identificadores.
+     *
+     * @param operatorIdentification identificación del operador
+     * @param orderId identificador del pedido
+     * @return envío creado
+     */
+    Shipment createShipmentByIdentifiers(
+            String operatorIdentification,
+            String orderId
+    );
+
+    /**
+     * Despacha un envío mediante identificadores.
+     *
+     * @param operatorIdentification identificación del operador
+     * @param shipmentId identificador del envío
+     * @return envío actualizado
+     */
+    Shipment dispatchShipmentByIdentifiers(
+            String operatorIdentification,
+            String shipmentId
+    );
+
+    /**
+     * Confirma la entrega mediante identificadores.
+     *
+     * @param operatorIdentification identificación del operador
+     * @param shipmentId identificador del envío
+     * @return envío actualizado
+     */
+    Shipment confirmDeliveryByIdentifiers(
+            String operatorIdentification,
+            String shipmentId
     );
 }

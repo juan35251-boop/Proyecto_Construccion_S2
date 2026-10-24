@@ -1,5 +1,6 @@
 package application.services;
 
+import application.domain.models.Administrator;
 import application.domain.models.Product;
 import application.domain.models.Seller;
 import application.domain.models.Warehouse;
@@ -8,41 +9,52 @@ import application.domain.valueobjects.ProductType;
 import application.domain.valueobjects.UserStatus;
 import application.domain.valueobjects.WarehouseOwnerType;
 import application.ports.output.ProductRepository;
+import application.services.support.InMemoryUserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Pruebas unitarias del servicio encargado de registrar productos.
- *
- * Se utiliza un repositorio en memoria para verificar el comportamiento
- * del servicio sin conectarlo todavía con una base de datos.
- */
 class RegisterProductServiceTest {
 
-    /**
-     * Verifica que un vendedor activo pueda registrar un producto.
-     */
+    private InMemoryUserRepository userRepository;
+    private RecordingProductRepository productRepository;
+    private RegisterProductService service;
+
+    @BeforeEach
+    void setUp() {
+        userRepository =
+                new InMemoryUserRepository();
+
+        productRepository =
+                new RecordingProductRepository();
+
+        service =
+                new RegisterProductService(
+                        userRepository,
+                        productRepository
+                );
+    }
+
     @Test
-    void shouldRegisterProductByActiveSeller() {
-        InMemoryProductRepository repository =
-                new InMemoryProductRepository();
+    void shouldRegisterProductForActiveSeller() {
+        Seller seller =
+                createSeller(
+                        "SELLER-001",
+                        UserStatus.ACTIVE
+                );
 
-        RegisterProductService service =
-                new RegisterProductService(repository);
+        userRepository.save(seller);
 
-        Seller seller = createSeller(UserStatus.ACTIVE);
-
-        Product product = service.register(
-                seller,
-                ProductType.PHYSICAL,
-                ProductStatus.PUBLISHED
-        );
+        Product product =
+                service.register(
+                        "SELLER-001",
+                        ProductType.PHYSICAL,
+                        ProductStatus.PUBLISHED
+                );
 
         assertEquals(
                 ProductType.PHYSICAL,
@@ -54,188 +66,205 @@ class RegisterProductServiceTest {
                 product.getStatus()
         );
 
+        assertEquals(
+                "SELLER-001",
+                product.getSellerIdentification()
+        );
+
+        assertTrue(
+                product.belongsToSeller("SELLER-001")
+        );
+
         assertTrue(seller.managesProduct(product));
-        assertTrue(repository.contains(product));
-        assertEquals(1, repository.getProducts().size());
-    }
 
-    /**
-     * Verifica que el servicio no pueda crearse sin repositorio.
-     */
-    @Test
-    void shouldRejectNullRepository() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new RegisterProductService(null)
+        assertSame(
+                product,
+                productRepository.savedProduct
+        );
+
+        assertEquals(
+                1,
+                productRepository.saveCount
         );
     }
 
-    /**
-     * Verifica que no se pueda registrar un producto sin vendedor.
-     */
     @Test
-    void shouldRejectNullSeller() {
-        RegisterProductService service =
-                createService();
+    void shouldRegisterDigitalProduct() {
+        Seller seller =
+                createSeller(
+                        "SELLER-001",
+                        UserStatus.ACTIVE
+                );
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> service.register(
-                        null,
-                        ProductType.PHYSICAL,
-                        ProductStatus.PUBLISHED
-                )
+        userRepository.save(seller);
+
+        Product product =
+                service.register(
+                        "SELLER-001",
+                        ProductType.DIGITAL,
+                        ProductStatus.SUSPENDED
+                );
+
+        assertTrue(product.isDigital());
+
+        assertEquals(
+                ProductStatus.SUSPENDED,
+                product.getStatus()
         );
     }
 
-    /**
-     * Verifica que un vendedor inactivo no pueda registrar productos.
-     */
     @Test
     void shouldRejectInactiveSeller() {
-        RegisterProductService service =
-                createService();
+        Seller seller =
+                createSeller(
+                        "SELLER-001",
+                        UserStatus.INACTIVE
+                );
 
-        Seller seller = createSeller(UserStatus.INACTIVE);
+        userRepository.save(seller);
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> service.register(
-                        seller,
-                        ProductType.PHYSICAL,
-                        ProductStatus.PUBLISHED
-                )
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> service.register(
+                                "SELLER-001",
+                                ProductType.PHYSICAL,
+                                ProductStatus.PUBLISHED
+                        )
+                );
+
+        assertEquals(
+                "Only an active seller can register products.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Verifica que un vendedor bloqueado no pueda registrar productos.
-     */
     @Test
-    void shouldRejectBlockedSeller() {
-        RegisterProductService service =
-                createService();
+    void shouldRejectNonSellerUser() {
+        Administrator administrator =
+                new Administrator(
+                        "ADMIN-001",
+                        "Administrator",
+                        "admin@nexusmarket.com",
+                        UserStatus.ACTIVE
+                );
 
-        Seller seller = createSeller(UserStatus.BLOCKED);
+        userRepository.save(administrator);
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> service.register(
-                        seller,
-                        ProductType.DIGITAL,
-                        ProductStatus.PUBLISHED
-                )
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> service.register(
+                                "ADMIN-001",
+                                ProductType.PHYSICAL,
+                                ProductStatus.PUBLISHED
+                        )
+                );
+
+        assertEquals(
+                "Only a seller can register products.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Verifica que el tipo del producto sea obligatorio.
-     */
     @Test
-    void shouldRejectNullProductType() {
-        RegisterProductService service =
-                createService();
+    void shouldRejectUnknownSeller() {
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> service.register(
+                                "UNKNOWN",
+                                ProductType.PHYSICAL,
+                                ProductStatus.PUBLISHED
+                        )
+                );
 
-        Seller seller = createSeller(UserStatus.ACTIVE);
-
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> service.register(
-                        seller,
-                        null,
-                        ProductStatus.PUBLISHED
-                )
+        assertEquals(
+                "Seller was not found.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Verifica que el estado inicial del producto sea obligatorio.
-     */
     @Test
-    void shouldRejectNullProductStatus() {
-        RegisterProductService service =
-                createService();
+    void shouldRejectBlankSellerIdentification() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> service.register(
+                                " ",
+                                ProductType.PHYSICAL,
+                                ProductStatus.PUBLISHED
+                        )
+                );
 
-        Seller seller = createSeller(UserStatus.ACTIVE);
-
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> service.register(
-                        seller,
-                        ProductType.PHYSICAL,
-                        null
-                )
+        assertEquals(
+                "Seller identification must not be empty.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Crea un servicio con un repositorio en memoria.
-     *
-     * @return servicio preparado para las pruebas
-     */
-    private RegisterProductService createService() {
-        return new RegisterProductService(
-                new InMemoryProductRepository()
+    @Test
+    void shouldRejectNullUserRepository() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new RegisterProductService(
+                                        null,
+                                        productRepository
+                                )
+                );
+
+        assertEquals(
+                "User repository must not be null.",
+                exception.getMessage()
         );
     }
 
-    /**
-     * Crea un vendedor con el estado requerido por cada prueba.
-     *
-     * @param status estado que tendrá el vendedor
-     * @return vendedor preparado para la prueba
-     */
-    private Seller createSeller(UserStatus status) {
-        Warehouse warehouse = new Warehouse(
-                WarehouseOwnerType.SELLER
-        );
+    @Test
+    void shouldRejectNullProductRepository() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                new RegisterProductService(
+                                        userRepository,
+                                        null
+                                )
+                );
 
+        assertEquals(
+                "Product repository must not be null.",
+                exception.getMessage()
+        );
+    }
+
+    private Seller createSeller(
+            String identification,
+            UserStatus status
+    ) {
         return new Seller(
-                "2001",
-                "Test Seller",
-                "seller@email.com",
+                identification,
+                "Nexus Seller",
+                identification.toLowerCase()
+                        + "@nexusmarket.com",
                 status,
-                warehouse
+                new Warehouse(
+                        WarehouseOwnerType.SELLER
+                )
         );
     }
 
-    /**
-     * Implementación sencilla del repositorio que guarda los productos
-     * en una lista durante las pruebas.
-     */
-    private static class InMemoryProductRepository
+    private static class RecordingProductRepository
             implements ProductRepository {
 
-        private final List<Product> products =
-                new ArrayList<>();
+        private Product savedProduct;
+        private int saveCount;
 
-        /**
-         * Guarda el producto en la lista en memoria.
-         *
-         * @param product producto que se desea guardar
-         */
         @Override
         public void save(Product product) {
-            products.add(product);
-        }
-
-        /**
-         * Permite comprobar si un producto fue guardado.
-         *
-         * @param product producto buscado
-         * @return true si el producto está almacenado
-         */
-        boolean contains(Product product) {
-            return products.contains(product);
-        }
-
-        /**
-         * Devuelve una copia inmodificable de los productos guardados.
-         *
-         * @return productos almacenados durante la prueba
-         */
-        List<Product> getProducts() {
-            return List.copyOf(products);
+            this.savedProduct = product;
+            this.saveCount++;
         }
     }
 }

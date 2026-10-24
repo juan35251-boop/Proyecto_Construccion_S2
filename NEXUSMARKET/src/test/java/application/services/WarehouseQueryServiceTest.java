@@ -5,10 +5,12 @@ import application.domain.models.Buyer;
 import application.domain.models.LogisticsOperator;
 import application.domain.models.Seller;
 import application.domain.models.Supervisor;
+import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.BuyerStatus;
 import application.domain.valueobjects.UserStatus;
 import application.domain.valueobjects.WarehouseOwnerType;
+import application.services.support.InMemoryUserRepository;
 import application.services.support.InMemoryWarehouseRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,22 +22,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas del servicio de consulta de bodegas.
+ * Pruebas del servicio encargado
+ * de consultar bodegas.
  */
 class WarehouseQueryServiceTest {
 
     @Test
     @DisplayName("El administrador puede consultar todas las bodegas")
     void administratorShouldFindAllWarehouses() {
-        InMemoryWarehouseRepository repository =
-                createRepositoryWithWarehouses();
+        Administrator administrator =
+                createAdministrator();
 
         WarehouseQueryService service =
-                new WarehouseQueryService(repository);
+                createService(administrator);
 
         List<Warehouse> result =
                 service.findAccessibleWarehouses(
-                        createAdministrator()
+                        administrator.getIdentification()
                 );
 
         assertEquals(2, result.size());
@@ -44,14 +47,14 @@ class WarehouseQueryServiceTest {
     @Test
     @DisplayName("El supervisor puede consultar todas las bodegas")
     void supervisorShouldFindAllWarehouses() {
+        Supervisor supervisor = createSupervisor();
+
         WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
-                );
+                createService(supervisor);
 
         List<Warehouse> result =
                 service.findAccessibleWarehouses(
-                        createSupervisor()
+                        supervisor.getIdentification()
                 );
 
         assertEquals(2, result.size());
@@ -63,37 +66,38 @@ class WarehouseQueryServiceTest {
         Seller seller = createSeller();
 
         Warehouse secondWarehouse =
-                new Warehouse(WarehouseOwnerType.SELLER);
+                new Warehouse(
+                        WarehouseOwnerType.SELLER
+                );
 
         seller.associateWarehouse(secondWarehouse);
 
         WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
-                );
+                createService(seller);
 
         List<Warehouse> result =
-                service.findAccessibleWarehouses(seller);
+                service.findAccessibleWarehouses(
+                        seller.getIdentification()
+                );
 
         assertEquals(2, result.size());
-        assertTrue(
-                result.contains(secondWarehouse)
-        );
+        assertTrue(result.contains(secondWarehouse));
     }
 
     @Test
     @DisplayName("El operador consulta bodegas del Marketplace")
     void logisticsOperatorShouldFindMarketplaceWarehouses() {
-        WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
+        LogisticsOperator operator =
+                createLogisticsOperator(
+                        UserStatus.ACTIVE
                 );
+
+        WarehouseQueryService service =
+                createService(operator);
 
         List<Warehouse> result =
                 service.findAccessibleWarehouses(
-                        createLogisticsOperator(
-                                UserStatus.ACTIVE
-                        )
+                        operator.getIdentification()
                 );
 
         assertEquals(1, result.size());
@@ -106,15 +110,15 @@ class WarehouseQueryServiceTest {
     @Test
     @DisplayName("El comprador no puede consultar bodegas")
     void buyerShouldNotQueryWarehouses() {
+        Buyer buyer = createBuyer();
+
         WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
-                );
+                createService(buyer);
 
         assertThrows(
                 IllegalStateException.class,
                 () -> service.findAccessibleWarehouses(
-                        createBuyer()
+                        buyer.getIdentification()
                 )
         );
     }
@@ -122,28 +126,27 @@ class WarehouseQueryServiceTest {
     @Test
     @DisplayName("Debe rechazar un usuario inactivo")
     void shouldRejectInactiveUser() {
-        WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
+        LogisticsOperator operator =
+                createLogisticsOperator(
+                        UserStatus.INACTIVE
                 );
+
+        WarehouseQueryService service =
+                createService(operator);
 
         assertThrows(
                 IllegalStateException.class,
                 () -> service.findAccessibleWarehouses(
-                        createLogisticsOperator(
-                                UserStatus.INACTIVE
-                        )
+                        operator.getIdentification()
                 )
         );
     }
 
     @Test
-    @DisplayName("Debe rechazar un usuario nulo")
-    void shouldRejectNullUser() {
+    @DisplayName("Debe rechazar una identificación nula")
+    void shouldRejectNullIdentification() {
         WarehouseQueryService service =
-                new WarehouseQueryService(
-                        createRepositoryWithWarehouses()
-                );
+                createService(createAdministrator());
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -152,14 +155,79 @@ class WarehouseQueryServiceTest {
     }
 
     @Test
-    @DisplayName("Debe rechazar un repositorio nulo")
-    void shouldRejectNullRepository() {
+    @DisplayName("Debe rechazar una identificación vacía")
+    void shouldRejectBlankIdentification() {
+        WarehouseQueryService service =
+                createService(createAdministrator());
+
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new WarehouseQueryService(null)
+                () -> service.findAccessibleWarehouses(" ")
         );
     }
 
+    @Test
+    @DisplayName("Debe rechazar un usuario inexistente")
+    void shouldRejectMissingUser() {
+        WarehouseQueryService service =
+                new WarehouseQueryService(
+                        new InMemoryUserRepository(),
+                        createRepositoryWithWarehouses()
+                );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> service.findAccessibleWarehouses(
+                        "9999"
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("Debe rechazar un repositorio de usuarios nulo")
+    void shouldRejectNullUserRepository() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WarehouseQueryService(
+                        null,
+                        createRepositoryWithWarehouses()
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("Debe rechazar un repositorio de bodegas nulo")
+    void shouldRejectNullWarehouseRepository() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WarehouseQueryService(
+                        new InMemoryUserRepository(),
+                        null
+                )
+        );
+    }
+
+    /**
+     * Crea el servicio y registra al usuario solicitante.
+     */
+    private WarehouseQueryService createService(
+            User requester
+    ) {
+        InMemoryUserRepository userRepository =
+                new InMemoryUserRepository();
+
+        userRepository.save(requester);
+
+        return new WarehouseQueryService(
+                userRepository,
+                createRepositoryWithWarehouses()
+        );
+    }
+
+    /**
+     * Crea un repositorio con una bodega del Marketplace
+     * y una bodega de vendedor.
+     */
     private InMemoryWarehouseRepository
             createRepositoryWithWarehouses() {
         InMemoryWarehouseRepository repository =

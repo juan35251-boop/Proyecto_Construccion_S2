@@ -7,22 +7,36 @@ import application.domain.models.Warehouse;
 import application.domain.valueobjects.UserStatus;
 import application.ports.input.RegisterSellerUseCase;
 import application.ports.output.UserRepository;
+import application.ports.output.WarehouseRepository;
 
+/**
+ * Servicio encargado de registrar vendedores.
+ *
+ * Solamente un administrador activo puede registrar
+ * vendedores. La primera bodega del vendedor también
+ * se almacena para conservar su identificador permanente.
+ */
 public class RegisterSellerService
         implements RegisterSellerUseCase {
 
     private final UserRepository userRepository;
+    private final WarehouseRepository warehouseRepository;
 
+    /**
+     * Constructor utilizado por la aplicación.
+     */
     public RegisterSellerService(
-            UserRepository userRepository
+            UserRepository userRepository,
+            WarehouseRepository warehouseRepository
     ) {
-        if (userRepository == null) {
-            throw new IllegalArgumentException(
-                    "User repository must not be null."
-            );
-        }
+        validateUserRepository(userRepository);
+        validateWarehouseRepository(
+                warehouseRepository
+        );
 
         this.userRepository = userRepository;
+        this.warehouseRepository =
+                warehouseRepository;
     }
 
     @Override
@@ -35,6 +49,7 @@ public class RegisterSellerService
             Warehouse firstWarehouse
     ) {
         validateAdministrator(administrator);
+        validateWarehouse(firstWarehouse);
 
         Seller seller = new Seller(
                 identification,
@@ -52,6 +67,11 @@ public class RegisterSellerService
                 seller.getEmail()
         );
 
+        /*
+         * La bodega debe existir en su repositorio antes
+         * de formar parte de la información del vendedor.
+         */
+        warehouseRepository.save(firstWarehouse);
         userRepository.save(seller);
 
         return seller;
@@ -97,6 +117,26 @@ public class RegisterSellerService
         );
     }
 
+    private void validateUserRepository(
+            UserRepository userRepository
+    ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+    }
+
+    private void validateWarehouseRepository(
+            WarehouseRepository warehouseRepository
+    ) {
+        if (warehouseRepository == null) {
+            throw new IllegalArgumentException(
+                    "Warehouse repository must not be null."
+            );
+        }
+    }
+
     private void validateAdministrator(
             Administrator administrator
     ) {
@@ -120,6 +160,22 @@ public class RegisterSellerService
                 || identification.isBlank()) {
             throw new IllegalArgumentException(
                     "Administrator identification must not be empty."
+            );
+        }
+    }
+
+    private void validateWarehouse(
+            Warehouse warehouse
+    ) {
+        if (warehouse == null) {
+            throw new IllegalArgumentException(
+                    "Seller registration requires a warehouse."
+            );
+        }
+
+        if (!warehouse.isSellerWarehouse()) {
+            throw new IllegalArgumentException(
+                    "Seller registration requires a seller warehouse."
             );
         }
     }

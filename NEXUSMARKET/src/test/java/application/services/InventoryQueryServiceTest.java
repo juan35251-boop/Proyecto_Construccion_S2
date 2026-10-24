@@ -17,7 +17,7 @@ import application.domain.valueobjects.WarehouseOwnerType;
 import application.services.support.InMemoryInventoryQueryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
+import application.domain.models.User;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -207,7 +207,7 @@ class InventoryQueryServiceTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> service.findAccessibleInventory(null)
+                () -> service.findAccessibleInventory((User) null)
         );
     }
 

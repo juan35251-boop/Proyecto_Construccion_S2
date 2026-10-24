@@ -3,6 +3,7 @@ package application.services;
 import application.domain.models.Inventory;
 import application.domain.models.InventoryMovement;
 import application.domain.models.LogisticsOperator;
+import application.domain.models.Product;
 import application.domain.models.Seller;
 import application.domain.models.User;
 import application.domain.valueobjects.InventoryCondition;
@@ -10,46 +11,220 @@ import application.domain.valueobjects.InventoryMovementType;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.InventoryManagementUseCase;
 import application.ports.output.InventoryMovementRepository;
+import application.ports.output.InventoryQueryRepository;
 import application.ports.output.InventoryRepository;
+import application.ports.output.UserRepository;
 
 /**
- * Servicio de aplicación encargado de gestionar el inventario.
+ * Servicio de aplicación encargado de administrar inventarios.
  *
- * Implementa el puerto de entrada InventoryManagementUseCase,
- * permitiendo administrar el inventario sin depender
- * directamente de esta implementación.
+ * Permite registrar entradas, reservas, ajustes y devoluciones,
+ * además de modificar la condición operativa del inventario.
  *
- * Coordina los cambios en las cantidades disponibles,
- * comprueba los permisos del usuario y registra los
- * movimientos que sirven como evidencia.
+ * Cada operación que cambia una cantidad genera un movimiento
+ * que sirve como evidencia histórica.
  */
 public class InventoryManagementService
         implements InventoryManagementUseCase {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryMovementRepository movementRepository;
+    private final UserRepository userRepository;
+    private final InventoryQueryRepository inventoryQueryRepository;
 
     /**
-     * Construye el servicio con los repositorios necesarios.
+     * Construye el servicio completo para ser utilizado
+     * desde la API mediante identificadores.
      *
-     * @param inventoryRepository repositorio del inventario
+     * @param inventoryRepository repositorio de inventarios
+     * @param movementRepository repositorio de movimientos
+     * @param userRepository repositorio de usuarios
+     * @param inventoryQueryRepository repositorio para consultar inventarios
+     */
+    public InventoryManagementService(
+            InventoryRepository inventoryRepository,
+            InventoryMovementRepository movementRepository,
+            UserRepository userRepository,
+            InventoryQueryRepository inventoryQueryRepository
+    ) {
+        validatePersistenceRepositories(
+                inventoryRepository,
+                movementRepository
+        );
+
+        validateLookupRepositories(
+                userRepository,
+                inventoryQueryRepository
+        );
+
+        this.inventoryRepository = inventoryRepository;
+        this.movementRepository = movementRepository;
+        this.userRepository = userRepository;
+        this.inventoryQueryRepository =
+                inventoryQueryRepository;
+    }
+
+    /**
+     * Constructor conservado para mantener compatibilidad
+     * con las pruebas unitarias existentes.
+     *
+     * Este constructor solamente permite utilizar las operaciones
+     * que reciben objetos completos del dominio.
+     *
+     * @param inventoryRepository repositorio de inventarios
      * @param movementRepository repositorio de movimientos
      */
     public InventoryManagementService(
             InventoryRepository inventoryRepository,
             InventoryMovementRepository movementRepository
     ) {
-        validateRepositories(
+        validatePersistenceRepositories(
                 inventoryRepository,
                 movementRepository
         );
 
         this.inventoryRepository = inventoryRepository;
         this.movementRepository = movementRepository;
+        this.userRepository = null;
+        this.inventoryQueryRepository = null;
     }
 
     /**
-     * Registra el ingreso de nuevas unidades al inventario.
+     * Registra una entrada mediante identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad que ingresa
+     * @return movimiento generado
+     */
+    @Override
+    public InventoryMovement registerEntry(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    ) {
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Inventory inventory =
+                findInventory(inventoryId);
+
+        return registerEntry(
+                performedBy,
+                inventory,
+                quantity
+        );
+    }
+
+    /**
+     * Reserva unidades mediante identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad reservada
+     * @return movimiento generado
+     */
+    @Override
+    public InventoryMovement reserveQuantity(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    ) {
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Inventory inventory =
+                findInventory(inventoryId);
+
+        return reserveQuantity(
+                performedBy,
+                inventory,
+                quantity
+        );
+    }
+
+    /**
+     * Ajusta la cantidad mediante identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param newQuantity nueva cantidad disponible
+     * @return movimiento generado
+     */
+    @Override
+    public InventoryMovement adjustQuantity(
+            String performedByIdentification,
+            String inventoryId,
+            int newQuantity
+    ) {
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Inventory inventory =
+                findInventory(inventoryId);
+
+        return adjustQuantity(
+                performedBy,
+                inventory,
+                newQuantity
+        );
+    }
+
+    /**
+     * Registra una devolución mediante identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param quantity cantidad devuelta
+     * @return movimiento generado
+     */
+    @Override
+    public InventoryMovement registerReturn(
+            String performedByIdentification,
+            String inventoryId,
+            int quantity
+    ) {
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Inventory inventory =
+                findInventory(inventoryId);
+
+        return registerReturn(
+                performedBy,
+                inventory,
+                quantity
+        );
+    }
+
+    /**
+     * Cambia la condición mediante identificadores.
+     *
+     * @param performedByIdentification identificación del usuario
+     * @param inventoryId identificador del inventario
+     * @param newCondition nueva condición
+     */
+    @Override
+    public void changeCondition(
+            String performedByIdentification,
+            String inventoryId,
+            InventoryCondition newCondition
+    ) {
+        User performedBy =
+                findUser(performedByIdentification);
+
+        Inventory inventory =
+                findInventory(inventoryId);
+
+        changeCondition(
+                performedBy,
+                inventory,
+                newCondition
+        );
+    }
+
+    /**
+     * Registra el ingreso de nuevas unidades.
      *
      * @param performedBy usuario que realiza la operación
      * @param inventory inventario que recibe las unidades
@@ -62,32 +237,29 @@ public class InventoryManagementService
             Inventory inventory,
             int quantity
     ) {
-        InventoryMovement movement = createMovement(
-                performedBy,
-                inventory,
-                InventoryMovementType.ENTRY,
-                quantity
-        );
+        InventoryMovement movement =
+                createMovement(
+                        performedBy,
+                        inventory,
+                        InventoryMovementType.ENTRY,
+                        quantity
+                );
 
         inventory.addQuantity(quantity);
-
-        saveOperation(
-                inventory,
-                movement
-        );
+        saveOperation(inventory, movement);
 
         return movement;
     }
 
     /**
-     * Reserva unidades disponibles del inventario.
+     * Reserva unidades disponibles.
      *
-     * Inventory impide reservar existencias dañadas
-     * o cantidades superiores a las disponibles.
+     * El modelo de dominio impide reservar una cantidad superior
+     * a las existencias disponibles o inventario dañado.
      *
      * @param performedBy usuario que realiza la reserva
-     * @param inventory inventario que será afectado
-     * @param quantity cantidad que se desea reservar
+     * @param inventory inventario afectado
+     * @param quantity cantidad que se reserva
      * @return movimiento generado
      */
     @Override
@@ -96,33 +268,28 @@ public class InventoryManagementService
             Inventory inventory,
             int quantity
     ) {
-        InventoryMovement movement = createMovement(
-                performedBy,
-                inventory,
-                InventoryMovementType.RESERVATION,
-                quantity
-        );
+        InventoryMovement movement =
+                createMovement(
+                        performedBy,
+                        inventory,
+                        InventoryMovementType.RESERVATION,
+                        quantity
+                );
 
         inventory.reserveQuantity(quantity);
-
-        saveOperation(
-                inventory,
-                movement
-        );
+        saveOperation(inventory, movement);
 
         return movement;
     }
 
     /**
-     * Ajusta la cantidad disponible a un nuevo valor.
+     * Ajusta la cantidad disponible.
      *
-     * El movimiento almacena la diferencia entre la cantidad
-     * anterior y la nueva cantidad.
-     *
-     * No se registra un ajuste si ambas cantidades son iguales.
+     * El movimiento almacena la diferencia absoluta entre
+     * la cantidad anterior y la nueva cantidad.
      *
      * @param performedBy usuario que realiza el ajuste
-     * @param inventory inventario que será ajustado
+     * @param inventory inventario ajustado
      * @param newQuantity nueva cantidad disponible
      * @return movimiento generado
      */
@@ -132,7 +299,11 @@ public class InventoryManagementService
             Inventory inventory,
             int newQuantity
     ) {
-        validateInventory(inventory);
+        validateInventoryAccess(
+                performedBy,
+                inventory
+        );
+
         validateNonNegativeQuantity(newQuantity);
 
         int previousQuantity =
@@ -145,27 +316,26 @@ public class InventoryManagementService
         }
 
         int adjustedQuantity =
-                Math.abs(previousQuantity - newQuantity);
+                Math.abs(
+                        previousQuantity - newQuantity
+                );
 
-        InventoryMovement movement = createMovement(
-                performedBy,
-                inventory,
-                InventoryMovementType.ADJUSTMENT,
-                adjustedQuantity
-        );
+        InventoryMovement movement =
+                new InventoryMovement(
+                        inventory,
+                        InventoryMovementType.ADJUSTMENT,
+                        adjustedQuantity,
+                        performedBy
+                );
 
         inventory.adjustQuantity(newQuantity);
-
-        saveOperation(
-                inventory,
-                movement
-        );
+        saveOperation(inventory, movement);
 
         return movement;
     }
 
     /**
-     * Registra la devolución de unidades al inventario.
+     * Registra el retorno de unidades.
      *
      * @param performedBy usuario que procesa la devolución
      * @param inventory inventario que recibe las unidades
@@ -178,19 +348,16 @@ public class InventoryManagementService
             Inventory inventory,
             int quantity
     ) {
-        InventoryMovement movement = createMovement(
-                performedBy,
-                inventory,
-                InventoryMovementType.RETURN,
-                quantity
-        );
+        InventoryMovement movement =
+                createMovement(
+                        performedBy,
+                        inventory,
+                        InventoryMovementType.RETURN,
+                        quantity
+                );
 
         inventory.addQuantity(quantity);
-
-        saveOperation(
-                inventory,
-                movement
-        );
+        saveOperation(inventory, movement);
 
         return movement;
     }
@@ -198,14 +365,8 @@ public class InventoryManagementService
     /**
      * Cambia la condición operativa del inventario.
      *
-     * Permite marcarlo, por ejemplo, como disponible
-     * o dañado.
-     *
-     * Esta operación no modifica cantidades y, por lo tanto,
-     * no genera un movimiento de inventario.
-     *
      * @param performedBy usuario que realiza el cambio
-     * @param inventory inventario que será modificado
+     * @param inventory inventario modificado
      * @param newCondition nueva condición
      */
     @Override
@@ -219,20 +380,24 @@ public class InventoryManagementService
                 inventory
         );
 
+        if (newCondition == null) {
+            throw new IllegalArgumentException(
+                    "Inventory condition must not be null."
+            );
+        }
+
         inventory.changeCondition(newCondition);
         inventoryRepository.save(inventory);
     }
 
     /**
-     * Crea un movimiento después de verificar
-     * que el usuario tenga permiso sobre el
-     * inventario específico.
+     * Crea un movimiento después de validar el acceso.
      *
-     * @param performedBy usuario responsable
+     * @param performedBy usuario que realiza la operación
      * @param inventory inventario afectado
      * @param movementType tipo de movimiento
      * @param quantity cantidad involucrada
-     * @return movimiento creado
+     * @return movimiento generado
      */
     private InventoryMovement createMovement(
             User performedBy,
@@ -254,14 +419,11 @@ public class InventoryManagementService
     }
 
     /**
-     * Guarda el inventario actualizado y su movimiento.
-     *
-     * Cuando se implemente la infraestructura, ambas
-     * operaciones deberán ejecutarse dentro de una
-     * misma transacción.
+     * Guarda el inventario actualizado en MySQL
+     * y el movimiento histórico en MongoDB.
      *
      * @param inventory inventario actualizado
-     * @param movement movimiento generado
+     * @param movement movimiento histórico
      */
     private void saveOperation(
             Inventory inventory,
@@ -272,12 +434,62 @@ public class InventoryManagementService
     }
 
     /**
-     * Valida que los repositorios requeridos estén disponibles.
+     * Busca un usuario mediante su identificación.
+     *
+     * @param identification identificación del usuario
+     * @return usuario encontrado
+     */
+    private User findUser(
+            String identification
+    ) {
+        validateApiRepositories();
+
+        validateText(
+                identification,
+                "User identification"
+        );
+
+        return userRepository
+                .findByIdentification(identification)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "User was not found."
+                        )
+                );
+    }
+
+    /**
+     * Busca un inventario mediante su identificador.
+     *
+     * @param inventoryId identificador del inventario
+     * @return inventario encontrado
+     */
+    private Inventory findInventory(
+            String inventoryId
+    ) {
+        validateApiRepositories();
+
+        validateText(
+                inventoryId,
+                "Inventory identifier"
+        );
+
+        return inventoryQueryRepository
+                .findById(inventoryId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Inventory was not found."
+                        )
+                );
+    }
+
+    /**
+     * Valida que los repositorios de almacenamiento existan.
      *
      * @param inventoryRepository repositorio de inventarios
      * @param movementRepository repositorio de movimientos
      */
-    private void validateRepositories(
+    private void validatePersistenceRepositories(
             InventoryRepository inventoryRepository,
             InventoryMovementRepository movementRepository
     ) {
@@ -295,11 +507,83 @@ public class InventoryManagementService
     }
 
     /**
+     * Valida los repositorios utilizados para resolver identificadores.
+     *
+     * @param userRepository repositorio de usuarios
+     * @param inventoryQueryRepository repositorio de inventarios
+     */
+    private void validateLookupRepositories(
+            UserRepository userRepository,
+            InventoryQueryRepository inventoryQueryRepository
+    ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+
+        if (inventoryQueryRepository == null) {
+            throw new IllegalArgumentException(
+                    "Inventory query repository must not be null."
+            );
+        }
+    }
+
+    /**
+     * Impide utilizar las operaciones por identificadores
+     * cuando se construyó el servicio con el constructor anterior.
+     */
+    private void validateApiRepositories() {
+        if (userRepository == null
+                || inventoryQueryRepository == null) {
+            throw new IllegalStateException(
+                    "Identifier lookup repositories are not configured."
+            );
+        }
+    }
+
+    /**
+     * Comprueba que el usuario pueda administrar inventarios.
+     *
+     * @param user usuario que realiza la operación
+     */
+    private void validateAuthorizedUser(
+            User user
+    ) {
+        if (user == null) {
+            throw new IllegalArgumentException(
+                    "Inventory operation requires a user."
+            );
+        }
+
+        if (!user.isActive()) {
+            throw new IllegalStateException(
+                    "Only active users can manage inventory."
+            );
+        }
+
+        boolean isSeller =
+                user.getRole() == SystemRole.SELLER;
+
+        boolean isLogisticsOperator =
+                user.getRole()
+                        == SystemRole.LOGISTICS_OPERATOR;
+
+        if (!isSeller && !isLogisticsOperator) {
+            throw new IllegalStateException(
+                    "User is not authorized to manage inventory."
+            );
+        }
+    }
+
+    /**
      * Valida que el inventario exista.
      *
      * @param inventory inventario que será validado
      */
-    private void validateInventory(Inventory inventory) {
+    private void validateInventory(
+            Inventory inventory
+    ) {
         if (inventory == null) {
             throw new IllegalArgumentException(
                     "Inventory must not be null."
@@ -308,30 +592,18 @@ public class InventoryManagementService
     }
 
     /**
-     * Valida que la nueva cantidad no sea negativa.
+     * Comprueba que el usuario tenga acceso
+     * al inventario específico.
      *
-     * @param quantity cantidad que será validada
-     */
-    private void validateNonNegativeQuantity(int quantity) {
-        if (quantity < 0) {
-            throw new IllegalArgumentException(
-                    "Inventory quantity must not be negative."
-            );
-        }
-    }
-
-    /**
-     * Comprueba que el usuario tenga permiso para modificar
-     * el inventario específico.
+     * Un vendedor puede administrar un inventario cuando
+     * el producto pertenece a su identificación y la bodega
+     * se encuentra asociada con él.
      *
-     * Un vendedor solamente puede administrar sus propios
-     * productos y bodegas.
-     *
-     * Un operador logístico solamente puede administrar
-     * bodegas del Marketplace.
+     * Para productos antiguos sin propietario persistido,
+     * se conserva la validación mediante managesProduct.
      *
      * @param user usuario que realiza la operación
-     * @param inventory inventario administrado
+     * @param inventory inventario afectado
      */
     private void validateInventoryAccess(
             User user,
@@ -341,8 +613,12 @@ public class InventoryManagementService
         validateInventory(inventory);
 
         if (user instanceof Seller seller) {
-            if (!seller.managesProduct(
-                    inventory.getProduct()
+            Product product =
+                    inventory.getProduct();
+
+            if (!sellerManagesProduct(
+                    seller,
+                    product
             )) {
                 throw new IllegalStateException(
                         "Seller can only manage inventory for their own products."
@@ -370,34 +646,64 @@ public class InventoryManagementService
     }
 
     /**
-     * Comprueba que el usuario esté activo y pertenezca
-     * a uno de los roles autorizados para gestionar inventario.
+     * Determina si el producto pertenece al vendedor.
      *
-     * @param user usuario que realiza la operación
+     * Los productos recuperados desde MySQL conservan
+     * sellerIdentification, por lo que la autorización
+     * se comprueba mediante esa identificación.
+     *
+     * El uso de managesProduct se conserva únicamente
+     * para productos antiguos creados sin propietario.
+     *
+     * @param seller vendedor que realiza la operación
+     * @param product producto relacionado con el inventario
+     * @return true si el vendedor administra el producto
      */
-    private void validateAuthorizedUser(User user) {
-        if (user == null) {
+    private boolean sellerManagesProduct(
+            Seller seller,
+            Product product
+    ) {
+        if (product == null) {
+            return false;
+        }
+
+        if (product.getSellerIdentification() != null) {
+            return product.belongsToSeller(
+                    seller.getIdentification()
+            );
+        }
+
+        return seller.managesProduct(product);
+    }
+
+    /**
+     * Valida que una cantidad no sea negativa.
+     *
+     * @param quantity cantidad que será validada
+     */
+    private void validateNonNegativeQuantity(
+            int quantity
+    ) {
+        if (quantity < 0) {
             throw new IllegalArgumentException(
-                    "Inventory operation must be performed by a user."
+                    "Inventory quantity must not be negative."
             );
         }
+    }
 
-        if (!user.isActive()) {
-            throw new IllegalStateException(
-                    "Only active users can manage inventory."
-            );
-        }
-
-        boolean isSeller =
-                user.getRole() == SystemRole.SELLER;
-
-        boolean isLogisticsOperator =
-                user.getRole()
-                        == SystemRole.LOGISTICS_OPERATOR;
-
-        if (!isSeller && !isLogisticsOperator) {
-            throw new IllegalStateException(
-                    "User is not authorized to manage inventory."
+    /**
+     * Valida un texto obligatorio.
+     *
+     * @param value texto que será validado
+     * @param fieldName nombre del campo
+     */
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
             );
         }
     }

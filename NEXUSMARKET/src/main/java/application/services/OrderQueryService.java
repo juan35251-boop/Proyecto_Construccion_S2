@@ -8,46 +8,65 @@ import application.domain.models.User;
 import application.domain.valueobjects.SystemRole;
 import application.ports.input.OrderQueryUseCase;
 import application.ports.output.OrderQueryRepository;
-import application.ports.input.OrderQueryUseCase;
+import application.ports.output.UserRepository;
+
 import java.util.List;
 
 /**
  * Servicio de aplicación encargado de consultar pedidos.
  *
- * Implementa el puerto de entrada OrderQueryUseCase,
- * permitiendo consultar pedidos sin depender directamente
- * de esta implementación.
+ * Permisos aplicados:
  *
- * Permisos:
- *
- * - El comprador consulta únicamente sus pedidos.
- * - El vendedor consulta pedidos con sus productos.
- * - El operador logístico consulta pedidos físicos.
- * - El administrador consulta todos los pedidos.
- * - El supervisor consulta todos los pedidos.
+ * - Comprador: consulta únicamente sus pedidos.
+ * - Vendedor: consulta pedidos que contienen sus productos.
+ * - Operador logístico: consulta pedidos con productos físicos.
+ * - Administrador: consulta todos los pedidos.
+ * - Supervisor: consulta todos los pedidos.
  */
 public class OrderQueryService
         implements OrderQueryUseCase {
 
-    private final OrderQueryRepository
-            orderQueryRepository;
+    private final UserRepository userRepository;
+    private final OrderQueryRepository orderQueryRepository;
 
     /**
-     * Construye el servicio con el repositorio
-     * de consulta.
+     * Construye el servicio para consultas que ya
+     * proporcionan el usuario del dominio.
      *
-     * @param orderQueryRepository repositorio
-     *                             de consulta de pedidos
+     * Este constructor se conserva para mantener
+     * las pruebas unitarias existentes.
+     *
+     * @param orderQueryRepository repositorio de consultas
      */
     public OrderQueryService(
             OrderQueryRepository orderQueryRepository
     ) {
-        if (orderQueryRepository == null) {
-            throw new IllegalArgumentException(
-                    "Order query repository must not be null."
-            );
-        }
+        validateOrderQueryRepository(
+                orderQueryRepository
+        );
 
+        this.userRepository = null;
+        this.orderQueryRepository =
+                orderQueryRepository;
+    }
+
+    /**
+     * Construye el servicio completo utilizado por la API.
+     *
+     * @param userRepository repositorio de usuarios
+     * @param orderQueryRepository repositorio de pedidos
+     */
+    public OrderQueryService(
+            UserRepository userRepository,
+            OrderQueryRepository orderQueryRepository
+    ) {
+        validateUserRepository(userRepository);
+
+        validateOrderQueryRepository(
+                orderQueryRepository
+        );
+
+        this.userRepository = userRepository;
         this.orderQueryRepository =
                 orderQueryRepository;
     }
@@ -55,7 +74,7 @@ public class OrderQueryService
     /**
      * Obtiene los pedidos visibles para el usuario.
      *
-     * @param requestedBy usuario que realiza la consulta
+     * @param requestedBy usuario solicitante
      * @return pedidos autorizados
      */
     @Override
@@ -82,34 +101,32 @@ public class OrderQueryService
         if (requestedBy instanceof Buyer buyer) {
             return orders.stream()
                     .filter(
-                            order ->
-                                    belongsToBuyer(
-                                            order,
-                                            buyer
-                                    )
+                            order -> belongsToBuyer(
+                                    order,
+                                    buyer
+                            )
                     )
                     .toList();
         }
 
         /*
-         * El vendedor consulta pedidos que contengan
+         * El vendedor consulta pedidos que contienen
          * por lo menos uno de sus productos.
          */
         if (requestedBy instanceof Seller seller) {
             return orders.stream()
                     .filter(
-                            order ->
-                                    containsSellerProduct(
-                                            order,
-                                            seller
-                                    )
+                            order -> containsSellerProduct(
+                                    order,
+                                    seller
+                            )
                     )
                     .toList();
         }
 
         /*
          * El operador logístico solamente consulta
-         * pedidos que contengan productos físicos.
+         * pedidos que necesitan despacho físico.
          */
         if (requestedBy.getRole()
                 == SystemRole.LOGISTICS_OPERATOR) {
@@ -126,11 +143,131 @@ public class OrderQueryService
     }
 
     /**
+     * Consulta pedidos utilizando la identificación
+     * del usuario solicitante.
+     *
+     * @param requesterIdentification identificación del usuario
+     * @return pedidos autorizados
+     */
+    @Override
+    public List<Order>
+    findAccessibleOrdersByRequesterIdentification(
+            String requesterIdentification
+    ) {
+        User requester =
+                findRequester(requesterIdentification);
+
+        return findAccessibleOrders(requester);
+    }
+
+    /**
+     * Consulta un pedido específico y comprueba
+     * que sea visible para el usuario solicitante.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @param orderId identificador del pedido
+     * @return pedido autorizado
+     */
+    @Override
+    public Order findAccessibleOrderByIdentifiers(
+            String requesterIdentification,
+            String orderId
+    ) {
+        User requester =
+                findRequester(requesterIdentification);
+
+        validateText(
+                orderId,
+                "Order identifier"
+        );
+
+        Order order = orderQueryRepository
+                .findById(orderId)
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Order was not found."
+                        )
+                );
+
+        validateOrderAccess(
+                requester,
+                order
+        );
+
+        return order;
+    }
+
+    /**
+     * Localiza al usuario que realiza la consulta.
+     *
+     * @param requesterIdentification identificación del usuario
+     * @return usuario encontrado
+     */
+    private User findRequester(
+            String requesterIdentification
+    ) {
+        validateText(
+                requesterIdentification,
+                "Requester identification"
+        );
+
+        validateUserRepositoryAvailable();
+
+        return userRepository
+                .findByIdentification(
+                        requesterIdentification
+                )
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
+    }
+
+    /**
+     * Comprueba si el usuario puede consultar
+     * un pedido específico.
+     *
+     * @param requester usuario solicitante
+     * @param order pedido consultado
+     */
+    private void validateOrderAccess(
+            User requester,
+            Order order
+    ) {
+        validateActiveRequester(requester);
+
+        if (hasGlobalAccess(requester)) {
+            return;
+        }
+
+        if (requester instanceof Buyer buyer
+                && belongsToBuyer(order, buyer)) {
+            return;
+        }
+
+        if (requester instanceof Seller seller
+                && containsSellerProduct(order, seller)) {
+            return;
+        }
+
+        if (requester.getRole()
+                == SystemRole.LOGISTICS_OPERATOR
+                && order.containsPhysicalProducts()) {
+            return;
+        }
+
+        throw new IllegalStateException(
+                "User is not authorized to query this order."
+        );
+    }
+
+    /**
      * Comprueba si el pedido pertenece al comprador.
      *
-     * Se compara la identidad del comprador porque
-     * el modelo todavía no implementa igualdad
-     * mediante identificación.
+     * La comparación se realiza mediante identificación,
+     * porque las entidades recuperadas desde persistencia
+     * pueden ser instancias diferentes.
      *
      * @param order pedido consultado
      * @param buyer comprador solicitante
@@ -140,16 +277,19 @@ public class OrderQueryService
             Order order,
             Buyer buyer
     ) {
-        return order.getBuyer() == buyer;
+        return order.getBuyer() != null
+                && buyer.getIdentification().equals(
+                        order.getBuyer().getIdentification()
+                );
     }
 
     /**
-     * Comprueba si el pedido contiene al menos
-     * un producto administrado por el vendedor.
+     * Comprueba si el pedido contiene algún producto
+     * administrado por el vendedor.
      *
      * @param order pedido consultado
      * @param seller vendedor solicitante
-     * @return true si contiene un producto del vendedor
+     * @return true si contiene productos del vendedor
      */
     private boolean containsSellerProduct(
             Order order,
@@ -167,8 +307,7 @@ public class OrderQueryService
     }
 
     /**
-     * Valida que la consulta sea realizada
-     * por un usuario activo.
+     * Valida que el usuario exista y esté activo.
      *
      * @param requestedBy usuario solicitante
      */
@@ -189,16 +328,67 @@ public class OrderQueryService
     }
 
     /**
-     * Indica si el usuario tiene acceso global
-     * de lectura sobre los pedidos.
+     * Indica si el usuario tiene acceso global.
      *
      * @param user usuario solicitante
-     * @return true si es administrador o supervisor
+     * @return true para administrador o supervisor
      */
     private boolean hasGlobalAccess(User user) {
         return user.getRole()
                 == SystemRole.ADMINISTRATOR
                 || user.getRole()
                 == SystemRole.SUPERVISOR;
+    }
+
+    /**
+     * Valida un texto obligatorio.
+     */
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Valida el repositorio de usuarios.
+     */
+    private void validateUserRepository(
+            UserRepository userRepository
+    ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+    }
+
+    /**
+     * Comprueba que el repositorio de usuarios
+     * esté disponible para consultas por identificación.
+     */
+    private void validateUserRepositoryAvailable() {
+        if (userRepository == null) {
+            throw new IllegalStateException(
+                    "User repository is required for identifier-based operations."
+            );
+        }
+    }
+
+    /**
+     * Valida el repositorio de consultas de pedidos.
+     */
+    private void validateOrderQueryRepository(
+            OrderQueryRepository orderQueryRepository
+    ) {
+        if (orderQueryRepository == null) {
+            throw new IllegalArgumentException(
+                    "Order query repository must not be null."
+            );
+        }
     }
 }

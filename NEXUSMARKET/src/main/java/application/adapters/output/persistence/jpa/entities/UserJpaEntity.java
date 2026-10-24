@@ -3,7 +3,7 @@ package application.adapters.output.persistence.jpa.entities;
 import application.domain.valueobjects.BuyerStatus;
 import application.domain.valueobjects.SystemRole;
 import application.domain.valueobjects.UserStatus;
-import application.domain.valueobjects.WarehouseOwnerType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
@@ -11,6 +11,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
 import java.util.ArrayList;
@@ -18,6 +19,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Entidad JPA utilizada para almacenar usuarios.
+ *
+ * Cuando el usuario es un vendedor, se conservan los
+ * identificadores reales de sus bodegas. Esto permite
+ * reconstruirlas sin generar identificadores nuevos.
+ */
 @Entity
 @Table(name = "users")
 public class UserJpaEntity {
@@ -65,16 +73,29 @@ public class UserJpaEntity {
     private BuyerStatus buyerStatus;
 
     @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "user_additional_addresses",
+            joinColumns = @JoinColumn(
+                    name = "user_identification"
+            )
+    )
+    @Column(name = "address")
     private List<String> additionalAddresses =
             new ArrayList<>();
 
-    /*
-     * Se utiliza Set para evitar que Hibernate intente
-     * recuperar dos colecciones tipo List simultáneamente.
+    /**
+     * Identificadores permanentes de las bodegas
+     * administradas por un vendedor.
      */
     @ElementCollection(fetch = FetchType.EAGER)
-    @Enumerated(EnumType.STRING)
-    private Set<WarehouseOwnerType> warehouseOwnerTypes =
+    @CollectionTable(
+            name = "seller_warehouse_ids",
+            joinColumns = @JoinColumn(
+                    name = "seller_identification"
+            )
+    )
+    @Column(name = "warehouse_id")
+    private Set<String> warehouseIds =
             new HashSet<>();
 
     protected UserJpaEntity() {
@@ -109,8 +130,7 @@ public class UserJpaEntity {
                                 additionalAddresses
                         );
 
-        this.warehouseOwnerTypes =
-                new HashSet<>();
+        this.warehouseIds = new HashSet<>();
     }
 
     /**
@@ -122,7 +142,7 @@ public class UserJpaEntity {
             String email,
             UserStatus status,
             SystemRole role,
-            List<WarehouseOwnerType> warehouseOwnerTypes
+            Set<String> warehouseIds
     ) {
         this.identification = identification;
         this.fullName = fullName;
@@ -135,17 +155,15 @@ public class UserJpaEntity {
         this.additionalAddresses =
                 new ArrayList<>();
 
-        this.warehouseOwnerTypes =
-                warehouseOwnerTypes == null
+        this.warehouseIds =
+                warehouseIds == null
                         ? new HashSet<>()
-                        : new HashSet<>(
-                                warehouseOwnerTypes
-                        );
+                        : new HashSet<>(warehouseIds);
     }
 
     /**
-     * Constructor para administradores y otros usuarios
-     * que solamente necesitan los datos generales.
+     * Constructor para administradores y usuarios
+     * que solamente necesitan información general.
      */
     public UserJpaEntity(
             String identification,
@@ -164,7 +182,7 @@ public class UserJpaEntity {
         this.buyerStatus = null;
         this.additionalAddresses =
                 new ArrayList<>();
-        this.warehouseOwnerTypes =
+        this.warehouseIds =
                 new HashSet<>();
     }
 
@@ -204,11 +222,11 @@ public class UserJpaEntity {
         return List.copyOf(additionalAddresses);
     }
 
-    public List<WarehouseOwnerType> getWarehouseOwnerTypes() {
-        if (warehouseOwnerTypes == null) {
-            return List.of();
+    public Set<String> getWarehouseIds() {
+        if (warehouseIds == null) {
+            return Set.of();
         }
 
-        return List.copyOf(warehouseOwnerTypes);
+        return Set.copyOf(warehouseIds);
     }
 }

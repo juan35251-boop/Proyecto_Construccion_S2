@@ -2,128 +2,166 @@ package application.domain.models;
 
 import application.domain.valueobjects.OrderStatus;
 
+import java.util.Objects;
+import java.util.UUID;
+
 /**
- * Representa el proceso de envío asociado a una orden.
+ * Representa el proceso de envío asociado
+ * a un pedido físico o mixto.
  *
- * Un envío solamente puede crearse para una orden pagada que contenga
- * al menos un producto físico. Las órdenes completamente digitales no
- * necesitan un proceso de envío.
+ * Un envío solamente puede crearse para un pedido
+ * pagado que contenga al menos un producto físico.
  *
- * Esta clase no mantiene un estado propio. El avance del envío se refleja
- * directamente mediante los estados de la {@link Order} asociada.
+ * El avance del envío se refleja directamente
+ * mediante el estado del pedido asociado.
  */
 public class Shipment {
 
     /**
-     * Orden física o mixta asociada al envío.
+     * Identificador único del envío.
+     */
+    private final String shipmentId;
+
+    /**
+     * Pedido físico o mixto asociado.
      */
     private final Order order;
 
     /**
-     * Crea un envío para una orden pagada que contenga productos físicos.
+     * Crea un nuevo envío para un pedido físico pagado.
      *
-     * La orden debe existir, contener al menos un producto físico y
-     * encontrarse exactamente en estado {@link OrderStatus#PAID}.
-     *
-     * @param order orden asociada al envío
-     *
-     * @throws IllegalArgumentException si la orden es nula
-     * @throws IllegalStateException si la orden contiene únicamente
-     *                               productos digitales
-     * @throws IllegalStateException si la orden no está pagada
+     * @param order pedido asociado al envío
      */
     public Shipment(Order order) {
         validateOrder(order);
         validatePhysicalOrder(order);
         validatePaidOrder(order);
 
+        this.shipmentId =
+                UUID.randomUUID().toString();
+
         this.order = order;
     }
 
     /**
-     * Obtiene la orden asociada al envío.
+     * Reconstruye un envío recuperado desde persistencia.
      *
-     * @return la orden relacionada
+     * Este constructor no exige que el pedido continúe
+     * en PAID porque el envío recuperado puede encontrarse
+     * despachado, entregado o finalizado.
+     *
+     * @param shipmentId identificador persistido
+     * @param order pedido asociado
+     */
+    public Shipment(
+            String shipmentId,
+            Order order
+    ) {
+        validateText(
+                shipmentId,
+                "Shipment identifier"
+        );
+
+        validateOrder(order);
+        validatePhysicalOrder(order);
+        validateRestorableOrderStatus(order);
+
+        this.shipmentId = shipmentId;
+        this.order = order;
+    }
+
+    /**
+     * Obtiene el identificador único del envío.
+     *
+     * @return identificador del envío
+     */
+    public String getShipmentId() {
+        return shipmentId;
+    }
+
+    /**
+     * Obtiene el pedido asociado al envío.
+     *
+     * @return pedido relacionado
      */
     public Order getOrder() {
         return order;
     }
 
     /**
-     * Determina si el envío pertenece a la orden recibida.
+     * Determina si el envío pertenece al pedido recibido.
      *
-     * La comparación se realiza por identidad, por lo que ambas referencias
-     * deben apuntar a la misma instancia de {@link Order}.
+     * Primero compara las referencias. Si son diferentes,
+     * compara los identificadores persistentes.
      *
-     * @param order orden que se desea comparar
-     * @return {@code true} si corresponde a la misma instancia;
-     *         de lo contrario, {@code false}
+     * @param otherOrder pedido que se desea comparar
+     * @return true si corresponde al mismo pedido
      */
-    public boolean belongsTo(Order order) {
-        return this.order == order;
+    public boolean belongsTo(Order otherOrder) {
+        if (order == otherOrder) {
+            return true;
+        }
+
+        if (otherOrder == null) {
+            return false;
+        }
+
+        String currentOrderId =
+                order.getOrderId();
+
+        String otherOrderId =
+                otherOrder.getOrderId();
+
+        return currentOrderId != null
+                && currentOrderId.equals(otherOrderId);
     }
 
     /**
-     * Despacha la orden asociada al envío.
+     * Despacha el pedido asociado.
      *
-     * La operación se delega a {@link Order#dispatch()}, que comprueba
-     * que la orden esté pagada y que contenga productos físicos.
-     *
-     * @throws IllegalStateException si la orden no cumple las condiciones
-     *                               necesarias para ser despachada
+     * El pedido cambia desde PAID hasta DISPATCHED.
      */
     public void dispatch() {
         order.dispatch();
     }
 
     /**
-     * Confirma la entrega de la orden asociada.
+     * Confirma la entrega física del pedido.
      *
-     * La operación se delega a {@link Order#markAsDelivered()}, que exige
-     * que una orden física haya sido despachada previamente.
-     *
-     * @throws IllegalStateException si la orden todavía no está despachada
+     * El pedido cambia desde DISPATCHED hasta DELIVERED.
      */
     public void confirmDelivery() {
         order.markAsDelivered();
     }
 
     /**
-     * Indica si el envío ya fue despachado.
+     * Indica si el envío fue despachado.
      *
-     * También devuelve {@code true} para órdenes entregadas o finalizadas,
-     * porque esos estados solamente pueden alcanzarse después del despacho
-     * de una orden física.
-     *
-     * @return {@code true} si la orden está despachada, entregada
-     *         o finalizada; de lo contrario, {@code false}
+     * @return true si está despachado, entregado o finalizado
      */
     public boolean isDispatched() {
-        return order.getStatus() == OrderStatus.DISPATCHED
-                || order.getStatus() == OrderStatus.DELIVERED
-                || order.getStatus() == OrderStatus.FINALIZED;
+        return order.getStatus()
+                == OrderStatus.DISPATCHED
+                || order.getStatus()
+                == OrderStatus.DELIVERED
+                || order.getStatus()
+                == OrderStatus.FINALIZED;
     }
 
     /**
-     * Indica si el envío ya fue entregado.
+     * Indica si el envío fue entregado.
      *
-     * También devuelve {@code true} si la orden está finalizada, porque una
-     * orden solamente puede finalizarse después de su entrega.
-     *
-     * @return {@code true} si la orden está entregada o finalizada;
-     *         de lo contrario, {@code false}
+     * @return true si está entregado o finalizado
      */
     public boolean isDelivered() {
-        return order.getStatus() == OrderStatus.DELIVERED
-                || order.getStatus() == OrderStatus.FINALIZED;
+        return order.getStatus()
+                == OrderStatus.DELIVERED
+                || order.getStatus()
+                == OrderStatus.FINALIZED;
     }
 
     /**
-     * Valida que el envío esté relacionado con una orden.
-     *
-     * @param order orden que se desea validar
-     *
-     * @throws IllegalArgumentException si la orden es nula
+     * Valida que exista el pedido.
      */
     private void validateOrder(Order order) {
         if (order == null) {
@@ -134,14 +172,7 @@ public class Shipment {
     }
 
     /**
-     * Valida que la orden contenga al menos un producto físico.
-     *
-     * Las órdenes completamente digitales no requieren transporte.
-     *
-     * @param order orden que se desea validar
-     *
-     * @throws IllegalStateException si la orden solamente contiene
-     *                               productos digitales
+     * Valida que el pedido contenga productos físicos.
      */
     private void validatePhysicalOrder(Order order) {
         if (!order.containsPhysicalProducts()) {
@@ -152,12 +183,8 @@ public class Shipment {
     }
 
     /**
-     * Valida que la orden se encuentre pagada al crear el envío.
-     *
-     * @param order orden cuyo estado se desea validar
-     *
-     * @throws IllegalStateException si la orden no está exactamente
-     *                               en estado {@link OrderStatus#PAID}
+     * Valida que un envío nuevo se cree para
+     * un pedido pagado.
      */
     private void validatePaidOrder(Order order) {
         if (order.getStatus() != OrderStatus.PAID) {
@@ -165,5 +192,65 @@ public class Shipment {
                     "Shipment can only be created for a paid order."
             );
         }
+    }
+
+    /**
+     * Valida el estado de un pedido recuperado
+     * desde persistencia.
+     */
+    private void validateRestorableOrderStatus(
+            Order order
+    ) {
+        OrderStatus status = order.getStatus();
+
+        if (status != OrderStatus.PAID
+                && status != OrderStatus.DISPATCHED
+                && status != OrderStatus.DELIVERED
+                && status != OrderStatus.FINALIZED) {
+            throw new IllegalStateException(
+                    "Persisted shipment has an invalid order status."
+            );
+        }
+    }
+
+    /**
+     * Valida un texto obligatorio.
+     */
+    private void validateText(
+            String value,
+            String fieldName
+    ) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    fieldName + " must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Compara envíos mediante su identificador.
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof Shipment shipment)) {
+            return false;
+        }
+
+        return shipmentId.equals(
+                shipment.shipmentId
+        );
+    }
+
+    /**
+     * Genera el código hash mediante
+     * el identificador del envío.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(shipmentId);
     }
 }

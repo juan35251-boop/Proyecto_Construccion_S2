@@ -6,19 +6,46 @@ import application.domain.models.User;
 import java.util.List;
 
 /**
- * Puerto de entrada para consultar los pedidos
- * visibles para un usuario.
+ * Puerto de entrada que define las consultas
+ * autorizadas sobre los pedidos.
+ *
+ * La información visible depende del rol
+ * del usuario solicitante.
  */
 public interface OrderQueryUseCase {
 
     /**
-     * Obtiene los pedidos que el usuario tiene
-     * autorización para consultar.
+     * Consulta los pedidos visibles utilizando
+     * directamente un usuario del dominio.
      *
-     * @param requestedBy usuario que realiza la consulta
-     * @return pedidos autorizados para el usuario
+     * @param requestedBy usuario solicitante
+     * @return pedidos autorizados
      */
     List<Order> findAccessibleOrders(
             User requestedBy
+    );
+
+    /**
+     * Consulta los pedidos visibles utilizando
+     * la identificación recibida desde la API.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @return pedidos autorizados
+     */
+    List<Order> findAccessibleOrdersByRequesterIdentification(
+            String requesterIdentification
+    );
+
+    /**
+     * Consulta un pedido específico y comprueba
+     * que el solicitante tenga permiso para verlo.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @param orderId identificador del pedido
+     * @return pedido autorizado
+     */
+    Order findAccessibleOrderByIdentifiers(
+            String requesterIdentification,
+            String orderId
     );
 }

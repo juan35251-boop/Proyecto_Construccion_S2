@@ -5,35 +5,36 @@ import application.domain.models.Order;
 import application.domain.models.Return;
 
 /**
- * Puerto de entrada que define el caso de uso
- * para solicitar devoluciones en NexusMarket.
- *
- * Un comprador activo puede solicitar la devolución
- * de un pedido propio que haya sido entregado
- * o finalizado.
+ * Caso de uso encargado de solicitar
+ * devoluciones de órdenes.
  */
 public interface RequestReturnUseCase {
 
     /**
-     * Registra una solicitud de devolución.
+     * Solicita una devolución utilizando
+     * objetos del dominio.
      *
-     * El comprador debe tener su cuenta activa.
-     * Sin embargo, puede encontrarse suspendido
-     * comercialmente y conservar su derecho a devolver
-     * una compra anterior.
-     *
-     * @param buyer comprador que solicita la devolución
-     * @param order pedido que se desea devolver
-     * @return proceso de devolución registrado
-     *
-     * @throws IllegalArgumentException si el comprador
-     *         o el pedido son nulos
-     * @throws IllegalStateException si el comprador está
-     *         inactivo, el pedido pertenece a otra persona
-     *         o todavía no fue entregado
+     * @param buyer comprador solicitante
+     * @param order orden que será devuelta
+     * @return devolución creada
      */
     Return request(
             Buyer buyer,
             Order order
+    );
+
+    /**
+     * Solicita una devolución utilizando identificadores.
+     *
+     * Este método está preparado para ser utilizado
+     * desde la API REST.
+     *
+     * @param buyerIdentification identificación del comprador
+     * @param orderId identificador de la orden
+     * @return devolución creada
+     */
+    Return requestByIdentifiers(
+            String buyerIdentification,
+            String orderId
     );
 }

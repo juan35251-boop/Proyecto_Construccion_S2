@@ -7,31 +7,41 @@ import application.domain.models.Order;
  * Puerto de entrada que define el caso de uso
  * para confirmar el pago de un pedido.
  *
- * Este caso de uso no realiza un cobro bancario.
- * Solamente registra que el pedido fue pagado
- * y actualiza su estado.
+ * Este caso de uso no realiza el cobro mediante
+ * una entidad financiera. Solamente registra que
+ * el pago fue aprobado y cambia el pedido desde
+ * PENDING_PAYMENT hasta PAID.
  */
 public interface ConfirmOrderPaymentUseCase {
 
     /**
-     * Confirma el pago de un pedido perteneciente
-     * al comprador indicado.
+     * Confirma el pago utilizando objetos del dominio.
      *
-     * El pedido debe encontrarse en estado
-     * PENDING_PAYMENT para poder pasar a PAID.
+     * Este método se conserva para operaciones internas
+     * y para mantener las pruebas unitarias existentes.
      *
      * @param buyer comprador que confirma el pago
      * @param order pedido que fue pagado
      * @return pedido actualizado
-     *
-     * @throws IllegalArgumentException si el comprador
-     *         o el pedido son nulos
-     * @throws IllegalStateException si el comprador no puede
-     *         comprar, el pedido pertenece a otra persona
-     *         o el pedido no está pendiente de pago
      */
     Order confirm(
             Buyer buyer,
             Order order
+    );
+
+    /**
+     * Confirma el pago utilizando los identificadores
+     * recibidos desde la API REST.
+     *
+     * El comprador y el pedido deben existir. Además,
+     * el pedido debe pertenecer al comprador indicado.
+     *
+     * @param buyerIdentification identificación del comprador
+     * @param orderId identificador del pedido
+     * @return pedido actualizado
+     */
+    Order confirmByIdentifiers(
+            String buyerIdentification,
+            String orderId
     );
 }

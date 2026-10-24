@@ -16,10 +16,28 @@ import java.util.List;
 public interface InventoryQueryUseCase {
 
     /**
-     * Obtiene los inventarios visibles para el usuario.
+     * Obtiene los inventarios visibles utilizando
+     * la identificación del usuario solicitante.
+     *
+     * Esta operación está diseñada para ser utilizada
+     * desde los controladores REST.
+     *
+     * @param requesterIdentification identificación del solicitante
+     * @return inventarios que el usuario puede consultar
+     */
+    List<Inventory> findAccessibleInventory(
+            String requesterIdentification
+    );
+
+    /**
+     * Obtiene los inventarios visibles utilizando
+     * un usuario previamente localizado.
+     *
+     * Esta operación se conserva para mantener compatibilidad
+     * con las pruebas y componentes existentes.
      *
      * @param requestedBy usuario que realiza la consulta
-     * @return lista de inventarios autorizados
+     * @return inventarios que el usuario puede consultar
      */
     List<Inventory> findAccessibleInventory(
             User requestedBy

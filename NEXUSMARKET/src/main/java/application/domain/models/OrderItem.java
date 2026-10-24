@@ -1,44 +1,36 @@
 package application.domain.models;
 
+import java.util.Objects;
+
 /**
- * Representa un elemento individual dentro de una orden de compra.
+ * Representa un producto confirmado
+ * dentro de un pedido.
  *
- * Cada elemento relaciona un {@link Product} con la cantidad confirmada
- * por el comprador al crear la orden.
- *
- * A diferencia de {@link CartItem}, el producto y la cantidad no pueden
- * modificarse después de crear el elemento.
+ * El producto y su cantidad son inmutables
+ * después de crear el elemento.
  */
 public class OrderItem {
 
     /**
-     * Producto incluido en la orden.
-     *
-     * No puede reemplazarse después de crear el elemento.
+     * Producto confirmado.
      */
     private final Product product;
 
     /**
-     * Cantidad confirmada del producto.
-     *
-     * Debe ser mayor que cero y no puede modificarse después de crear
-     * el elemento.
+     * Cantidad confirmada.
      */
     private final int quantity;
 
     /**
-     * Crea un elemento de orden con un producto y una cantidad.
+     * Crea un elemento del pedido.
      *
-     * El producto y la cantidad se validan antes de ser almacenados.
-     *
-     * @param product producto incluido en la orden
-     * @param quantity cantidad confirmada del producto
-     *
-     * @throws IllegalArgumentException si el producto es nulo
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
+     * @param product producto confirmado
+     * @param quantity cantidad confirmada
      */
-    public OrderItem(Product product, int quantity) {
+    public OrderItem(
+            Product product,
+            int quantity
+    ) {
         validateProduct(product);
         validateQuantity(quantity);
 
@@ -47,45 +39,51 @@ public class OrderItem {
     }
 
     /**
-     * Obtiene el producto incluido en este elemento.
+     * Obtiene el producto.
      *
-     * @return el producto asociado
+     * @return producto confirmado
      */
     public Product getProduct() {
         return product;
     }
 
     /**
-     * Obtiene la cantidad confirmada del producto.
+     * Obtiene la cantidad.
      *
-     * @return la cantidad incluida en la orden
+     * @return cantidad confirmada
      */
     public int getQuantity() {
         return quantity;
     }
 
     /**
-     * Determina si este elemento pertenece al producto recibido.
+     * Determina si representa el producto recibido.
      *
-     * La comparación se realiza por identidad, por lo que ambas referencias
-     * deben apuntar a la misma instancia de {@link Product}.
+     * La comparación utiliza productId para funcionar
+     * correctamente con objetos recuperados desde MySQL.
      *
-     * @param product producto que se desea comparar
-     * @return {@code true} si corresponde a la misma instancia;
-     *         de lo contrario, {@code false}
+     * @param comparedProduct producto comparado
+     * @return true si representa el mismo producto
      */
-    public boolean belongsTo(Product product) {
-        return this.product == product;
+    public boolean belongsTo(
+            Product comparedProduct
+    ) {
+        if (comparedProduct == null) {
+            return false;
+        }
+
+        return product.getProductId()
+                .equals(
+                        comparedProduct.getProductId()
+                );
     }
 
     /**
-     * Valida que el elemento esté relacionado con un producto.
-     *
-     * @param product producto que se desea validar
-     *
-     * @throws IllegalArgumentException si el producto es nulo
+     * Valida el producto.
      */
-    private void validateProduct(Product product) {
+    private void validateProduct(
+            Product product
+    ) {
         if (product == null) {
             throw new IllegalArgumentException(
                     "Order item must contain a product."
@@ -94,18 +92,45 @@ public class OrderItem {
     }
 
     /**
-     * Valida que la cantidad confirmada sea mayor que cero.
-     *
-     * @param quantity cantidad que se desea validar
-     *
-     * @throws IllegalArgumentException si la cantidad es menor
-     *                                  o igual a cero
+     * Valida la cantidad.
      */
-    private void validateQuantity(int quantity) {
+    private void validateQuantity(
+            int quantity
+    ) {
         if (quantity <= 0) {
             throw new IllegalArgumentException(
                     "Order item quantity must be greater than zero."
             );
         }
+    }
+
+    /**
+     * Dos elementos son iguales cuando representan
+     * el mismo producto.
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof OrderItem orderItem)) {
+            return false;
+        }
+
+        return product.getProductId()
+                .equals(
+                        orderItem.product.getProductId()
+                );
+    }
+
+    /**
+     * Genera el código hash mediante productId.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                product.getProductId()
+        );
     }
 }

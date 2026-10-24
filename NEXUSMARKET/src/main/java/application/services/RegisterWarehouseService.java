@@ -1,84 +1,104 @@
 package application.services;
 
 import application.domain.models.Administrator;
+import application.domain.models.User;
 import application.domain.models.Warehouse;
 import application.domain.valueobjects.WarehouseOwnerType;
 import application.ports.input.RegisterWarehouseUseCase;
+import application.ports.output.UserRepository;
 import application.ports.output.WarehouseRepository;
 
 /**
  * Servicio de aplicación encargado de registrar bodegas.
  *
- * Implementa el puerto de entrada RegisterWarehouseUseCase,
- * permitiendo que un futuro controlador REST solicite el
- * registro sin depender directamente de esta implementación.
+ * Recibe la identificación del solicitante y utiliza
+ * UserRepository para obtener al usuario correspondiente.
  *
- * Según las responsabilidades definidas para NexusMarket,
- * solamente un administrador activo puede crear bodegas.
+ * Solamente un administrador activo puede registrar
+ * bodegas en NexusMarket.
  */
 public class RegisterWarehouseService
         implements RegisterWarehouseUseCase {
 
+    private final UserRepository userRepository;
     private final WarehouseRepository warehouseRepository;
 
     /**
-     * Construye el servicio con el repositorio de bodegas.
+     * Construye el servicio con los repositorios requeridos.
      *
-     * El servicio recibe el puerto de salida y no conoce
-     * la tecnología utilizada para almacenar la información.
-     *
+     * @param userRepository repositorio utilizado para
+     *        consultar al administrador
      * @param warehouseRepository repositorio utilizado
-     *                            para guardar bodegas
+     *        para guardar la bodega
      */
     public RegisterWarehouseService(
+            UserRepository userRepository,
             WarehouseRepository warehouseRepository
     ) {
-        validateRepository(warehouseRepository);
+        validateRepositories(
+                userRepository,
+                warehouseRepository
+        );
+
+        this.userRepository = userRepository;
         this.warehouseRepository = warehouseRepository;
     }
 
     /**
      * Registra una nueva bodega.
      *
-     * Antes de crearla, valida que la operación sea realizada
-     * por un administrador activo y que se haya indicado
-     * correctamente el tipo de propietario.
-     *
-     * @param registeredBy administrador que realiza el registro
+     * @param administratorIdentification identificación
+     *        del administrador que realiza el registro
      * @param ownerType tipo de propietario de la bodega
      * @return bodega registrada
      */
     @Override
     public Warehouse register(
-            Administrator registeredBy,
+            String administratorIdentification,
             WarehouseOwnerType ownerType
     ) {
-        validateAdministrator(registeredBy);
+        validateIdentification(
+                administratorIdentification
+        );
+
         validateOwnerType(ownerType);
 
-        /*
-         * Warehouse valida nuevamente que el tipo
-         * de propietario no sea nulo.
-         */
-        Warehouse warehouse = new Warehouse(ownerType);
+        User requester = userRepository
+                .findByIdentification(
+                        administratorIdentification
+                )
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "Requesting user was not found."
+                        )
+                );
 
-        /*
-         * El servicio solicita conservar la bodega mediante
-         * el puerto de salida, sin conocer la base de datos.
-         */
+        Administrator administrator =
+                validateAdministrator(requester);
+
+        validateActiveAdministrator(administrator);
+
+        Warehouse warehouse =
+                new Warehouse(ownerType);
+
         warehouseRepository.save(warehouse);
 
         return warehouse;
     }
 
     /**
-     * Valida que el repositorio requerido exista.
-     *
-     * @param warehouseRepository repositorio de bodegas
+     * Valida que los repositorios requeridos existan.
      */
-    private void validateRepository(
+    private void validateRepositories(
+            UserRepository userRepository,
             WarehouseRepository warehouseRepository
     ) {
+        if (userRepository == null) {
+            throw new IllegalArgumentException(
+                    "User repository must not be null."
+            );
+        }
+
         if (warehouseRepository == null) {
             throw new IllegalArgumentException(
                     "Warehouse repository must not be null."
@@ -87,20 +107,41 @@ public class RegisterWarehouseService
     }
 
     /**
-     * Valida que la operación sea realizada
-     * por un administrador activo.
-     *
-     * @param administrator administrador que realiza la operación
+     * Valida la identificación recibida.
      */
-    private void validateAdministrator(
-            Administrator administrator
+    private void validateIdentification(
+            String identification
     ) {
-        if (administrator == null) {
+        if (identification == null
+                || identification.isBlank()) {
             throw new IllegalArgumentException(
-                    "Administrator must not be null."
+                    "Administrator identification must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Comprueba que el usuario encontrado
+     * sea un administrador.
+     */
+    private Administrator validateAdministrator(
+            User user
+    ) {
+        if (!(user instanceof Administrator administrator)) {
+            throw new IllegalStateException(
+                    "Only an administrator can register warehouses."
             );
         }
 
+        return administrator;
+    }
+
+    /**
+     * Comprueba que el administrador esté activo.
+     */
+    private void validateActiveAdministrator(
+            Administrator administrator
+    ) {
         if (!administrator.isActive()) {
             throw new IllegalStateException(
                     "Only an active administrator can register warehouses."
@@ -109,10 +150,7 @@ public class RegisterWarehouseService
     }
 
     /**
-     * Valida que se indique el tipo de propietario
-     * operativo de la bodega.
-     *
-     * @param ownerType tipo de propietario
+     * Valida el tipo de propietario de la bodega.
      */
     private void validateOwnerType(
             WarehouseOwnerType ownerType

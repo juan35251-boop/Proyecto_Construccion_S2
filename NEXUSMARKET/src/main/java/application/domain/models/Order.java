@@ -4,113 +4,144 @@ import application.domain.valueobjects.OrderStatus;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Representa una orden de compra creada a partir de un carrito.
+ * Representa un pedido creado a partir de un carrito.
  *
- * La orden conserva el comprador, copia los productos y cantidades
- * presentes en el carrito y controla el avance del proceso mediante
- * {@link OrderStatus}.
+ * Cada pedido posee un identificador estable, un comprador,
+ * productos confirmados y un estado dentro del proceso comercial.
  *
- * Las órdenes con productos físicos deben ser despachadas antes de
- * entregarse. Las órdenes completamente digitales pueden pasar
- * directamente de pagadas a entregadas.
+ * Los pedidos físicos deben ser despachados antes de entregarse.
+ * Los pedidos digitales pueden entregarse después del pago.
  */
 public class Order {
 
     /**
-     * Comprador propietario de la orden.
+     * Identificador único del pedido.
+     */
+    private final String orderId;
+
+    /**
+     * Comprador propietario.
      */
     private final Buyer buyer;
 
     /**
-     * Elementos incluidos en la orden.
-     *
-     * Se crean a partir de los elementos que estaban en el carrito
-     * al momento de confirmar la compra.
+     * Productos confirmados.
      */
     private final List<OrderItem> items;
 
     /**
-     * Estado actual de la orden dentro del proceso de compra.
+     * Estado actual.
      */
     private OrderStatus status;
 
     /**
-     * Crea una orden a partir de un carrito.
+     * Crea un pedido nuevo desde un carrito.
      *
-     * El carrito debe existir, contener productos y pertenecer a un
-     * comprador autorizado para realizar compras. Todos los productos
-     * deben encontrarse publicados al confirmar la orden.
+     * El pedido comienza en estado PENDING_PAYMENT.
      *
-     * La orden inicia en estado
-     * {@link OrderStatus#PENDING_PAYMENT}.
-     *
-     * @param cart carrito desde el cual se crea la orden
-     *
-     * @throws IllegalArgumentException si el carrito es nulo
-     * @throws IllegalStateException si el carrito está vacío
-     * @throws IllegalStateException si el comprador no puede comprar
-     * @throws IllegalStateException si algún producto ya no está publicado
+     * @param cart carrito confirmado
      */
-    public Order(Cart cart) {
+    public Order(
+            Cart cart
+    ) {
         validateCart(cart);
-        validateBuyerCanPurchase(cart.getBuyer());
+        validateBuyerCanPurchase(
+                cart.getBuyer()
+        );
+
+        this.orderId =
+                UUID.randomUUID().toString();
 
         this.buyer = cart.getBuyer();
         this.items = copyCartItems(cart);
-        this.status = OrderStatus.PENDING_PAYMENT;
+        this.status =
+                OrderStatus.PENDING_PAYMENT;
     }
 
     /**
-     * Obtiene el comprador propietario de la orden.
+     * Reconstruye un pedido almacenado.
      *
-     * @return el comprador asociado
+     * Este constructor es utilizado por la persistencia JPA.
+     * No vuelve a validar el estado comercial actual del comprador,
+     * porque un pedido histórico debe poder consultarse aunque
+     * posteriormente el usuario haya sido bloqueado.
+     *
+     * @param orderId identificador del pedido
+     * @param buyer comprador propietario
+     * @param items productos confirmados
+     * @param status estado almacenado
+     */
+    public Order(
+            String orderId,
+            Buyer buyer,
+            List<OrderItem> items,
+            OrderStatus status
+    ) {
+        validateOrderId(orderId);
+        validateBuyer(buyer);
+        validateItems(items);
+        validateStatus(status);
+
+        this.orderId = orderId;
+        this.buyer = buyer;
+        this.items = new ArrayList<>(items);
+        this.status = status;
+    }
+
+    /**
+     * Obtiene el identificador único.
+     *
+     * @return identificador del pedido
+     */
+    public String getOrderId() {
+        return orderId;
+    }
+
+    /**
+     * Obtiene el comprador propietario.
+     *
+     * @return comprador
      */
     public Buyer getBuyer() {
         return buyer;
     }
 
     /**
-     * Obtiene una copia no modificable de los elementos de la orden.
+     * Obtiene una copia de los productos.
      *
-     * Esto evita que otras partes del sistema agreguen o eliminen
-     * elementos directamente.
-     *
-     * @return una copia de los elementos de la orden
+     * @return productos confirmados
      */
     public List<OrderItem> getItems() {
         return List.copyOf(items);
     }
 
     /**
-     * Obtiene el estado actual de la orden.
+     * Obtiene el estado actual.
      *
-     * @return el estado de la orden
+     * @return estado del pedido
      */
     public OrderStatus getStatus() {
         return status;
     }
 
     /**
-     * Indica si el proceso de la orden ya fue finalizado.
+     * Indica si el pedido está finalizado.
      *
-     * @return {@code true} si la orden está en estado
-     *         {@link OrderStatus#FINALIZED}; de lo contrario,
-     *         {@code false}
+     * @return true si está finalizado
      */
     public boolean isFinalized() {
         return status == OrderStatus.FINALIZED;
     }
 
     /**
-     * Determina si la orden contiene al menos un producto físico.
+     * Determina si el pedido contiene
+     * al menos un producto físico.
      *
-     * Una orden mixta, con productos físicos y digitales, también se
-     * considera una orden que requiere despacho físico.
-     *
-     * @return {@code true} si contiene al menos un producto físico;
-     *         de lo contrario, {@code false}
+     * @return true si requiere despacho físico
      */
     public boolean containsPhysicalProducts() {
         for (OrderItem item : items) {
@@ -123,13 +154,7 @@ public class Order {
     }
 
     /**
-     * Marca la orden como pagada.
-     *
-     * La operación solamente se permite cuando la orden se encuentra
-     * pendiente de pago.
-     *
-     * @throws IllegalStateException si la orden no está en estado
-     *                               {@link OrderStatus#PENDING_PAYMENT}
+     * Marca un pedido pendiente como pagado.
      */
     public void markAsPaid() {
         requireStatus(
@@ -141,14 +166,7 @@ public class Order {
     }
 
     /**
-     * Marca una orden física como despachada.
-     *
-     * La orden debe estar pagada y contener al menos un producto físico.
-     * Las órdenes completamente digitales no requieren despacho.
-     *
-     * @throws IllegalStateException si la orden no está pagada
-     * @throws IllegalStateException si la orden solamente contiene
-     *                               productos digitales
+     * Despacha un pedido físico pagado.
      */
     public void dispatch() {
         requireStatus(
@@ -166,14 +184,10 @@ public class Order {
     }
 
     /**
-     * Marca la orden como entregada.
+     * Marca el pedido como entregado.
      *
-     * Si contiene productos físicos, primero debe estar despachada.
-     * Si contiene únicamente productos digitales, solo necesita estar
-     * pagada para considerarse entregada.
-     *
-     * @throws IllegalStateException si una orden física no está despachada
-     * @throws IllegalStateException si una orden digital no está pagada
+     * Un pedido físico debe estar despachado.
+     * Un pedido digital debe estar pagado.
      */
     public void markAsDelivered() {
         if (containsPhysicalProducts()) {
@@ -192,12 +206,7 @@ public class Order {
     }
 
     /**
-     * Finaliza el proceso de la orden.
-     *
-     * La orden solamente puede finalizarse después de haber sido entregada.
-     *
-     * @throws IllegalStateException si la orden no está en estado
-     *                               {@link OrderStatus#DELIVERED}
+     * Finaliza un pedido entregado.
      */
     public void finalizeOrder() {
         requireStatus(
@@ -209,25 +218,19 @@ public class Order {
     }
 
     /**
-     * Copia los elementos del carrito y los convierte en elementos
-     * propios de la orden.
+     * Copia los productos del carrito.
      *
-     * Las cantidades quedan independientes del carrito. Si posteriormente
-     * se cambia una cantidad en el carrito, la orden no se modifica.
-     *
-     * Antes de copiar cada elemento se comprueba que su producto continúe
-     * publicado.
-     *
-     * @param cart carrito cuyos elementos se desean copiar
-     * @return una nueva lista de elementos de orden
-     *
-     * @throws IllegalStateException si algún producto no está publicado
+     * Las cantidades quedan independientes del carrito.
      */
-    private List<OrderItem> copyCartItems(Cart cart) {
-        List<OrderItem> orderItems = new ArrayList<>();
+    private List<OrderItem> copyCartItems(
+            Cart cart
+    ) {
+        List<OrderItem> orderItems =
+                new ArrayList<>();
 
         for (CartItem cartItem : cart.getItems()) {
-            Product product = cartItem.getProduct();
+            Product product =
+                    cartItem.getProduct();
 
             if (!product.isPublished()) {
                 throw new IllegalStateException(
@@ -247,15 +250,11 @@ public class Order {
     }
 
     /**
-     * Valida que la orden se cree a partir de un carrito válido
-     * y que este contenga al menos un producto.
-     *
-     * @param cart carrito que se desea validar
-     *
-     * @throws IllegalArgumentException si el carrito es nulo
-     * @throws IllegalStateException si el carrito está vacío
+     * Valida el carrito utilizado para crear el pedido.
      */
-    private void validateCart(Cart cart) {
+    private void validateCart(
+            Cart cart
+    ) {
         if (cart == null) {
             throw new IllegalArgumentException(
                     "Order must be created from a cart."
@@ -270,16 +269,13 @@ public class Order {
     }
 
     /**
-     * Valida que el comprador esté autorizado para confirmar la compra.
-     *
-     * Esta regla utiliza {@link Buyer#canPurchase()}, que comprueba tanto
-     * el estado general del usuario como su estado comercial.
-     *
-     * @param buyer comprador que se desea validar
-     *
-     * @throws IllegalStateException si el comprador no puede comprar
+     * Valida que el comprador pueda confirmar compras.
      */
-    private void validateBuyerCanPurchase(Buyer buyer) {
+    private void validateBuyerCanPurchase(
+            Buyer buyer
+    ) {
+        validateBuyer(buyer);
+
         if (!buyer.canPurchase()) {
             throw new IllegalStateException(
                     "Buyer is not authorized to confirm purchases."
@@ -288,24 +284,106 @@ public class Order {
     }
 
     /**
-     * Comprueba que la orden se encuentre en el estado requerido para
-     * ejecutar una transición.
-     *
-     * Este método centraliza la validación de los cambios de estado y evita
-     * que la orden avance en un orden incorrecto.
-     *
-     * @param expectedStatus estado requerido para ejecutar la operación
-     * @param errorMessage mensaje utilizado si el estado no corresponde
-     *
-     * @throws IllegalStateException si la orden no se encuentra en
-     *                               el estado esperado
+     * Valida el identificador del pedido.
+     */
+    private void validateOrderId(
+            String orderId
+    ) {
+        if (orderId == null || orderId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Order identifier must not be empty."
+            );
+        }
+    }
+
+    /**
+     * Valida el comprador.
+     */
+    private void validateBuyer(
+            Buyer buyer
+    ) {
+        if (buyer == null) {
+            throw new IllegalArgumentException(
+                    "Order must belong to a buyer."
+            );
+        }
+    }
+
+    /**
+     * Valida los productos reconstruidos.
+     */
+    private void validateItems(
+            List<OrderItem> items
+    ) {
+        if (items == null) {
+            throw new IllegalArgumentException(
+                    "Order items must not be null."
+            );
+        }
+
+        if (items.isEmpty()) {
+            throw new IllegalStateException(
+                    "Order must contain at least one item."
+            );
+        }
+
+        if (items.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(
+                    "Order items must not contain null values."
+            );
+        }
+    }
+
+    /**
+     * Valida el estado.
+     */
+    private void validateStatus(
+            OrderStatus status
+    ) {
+        if (status == null) {
+            throw new IllegalArgumentException(
+                    "Order status must not be null."
+            );
+        }
+    }
+
+    /**
+     * Exige un estado específico antes
+     * de realizar una transición.
      */
     private void requireStatus(
             OrderStatus expectedStatus,
             String errorMessage
     ) {
         if (status != expectedStatus) {
-            throw new IllegalStateException(errorMessage);
+            throw new IllegalStateException(
+                    errorMessage
+            );
         }
+    }
+
+    /**
+     * Dos pedidos son iguales si poseen
+     * el mismo identificador.
+     */
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+
+        if (!(object instanceof Order order)) {
+            return false;
+        }
+
+        return orderId.equals(order.orderId);
+    }
+
+    /**
+     * Genera el código hash mediante orderId.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(orderId);
     }
 }
